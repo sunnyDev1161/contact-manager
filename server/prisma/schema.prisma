@@ -2,23 +2,20 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// SQLite: a single local file, no database server to install or run. Right
+// choice for one laptop. If this is ever hosted (see render.yaml), switch
+// provider back to "postgresql" and DATABASE_URL to a real connection
+// string — SQLite's ephemeral disk on most hosts would lose data on restart.
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  OWNER
-  STAFF
-}
-
-enum Unit {
-  PCS
-  KG
-  G
-  LITRE
-  ML
-}
+// SQLite has no native enum type, so Role and Unit are plain strings here.
+// Valid values are enforced at the API layer (zod schemas in the routes),
+// same as they'd be validated client-side regardless of the DB engine.
+// Role: "OWNER" | "STAFF"
+// Unit: "PCS" | "KG" | "G" | "LITRE" | "ML"
 
 // A Business is a tenant. Every table below is scoped to one, so the schema
 // is already tenant-safe even though the app is currently run for one shop.
@@ -39,7 +36,7 @@ model User {
   name         String
   email        String   @unique
   passwordHash String
-  role         Role     @default(STAFF)
+  role         String   @default("STAFF")
   createdAt    DateTime @default(now())
 
   sales Sale[]
@@ -47,6 +44,10 @@ model User {
   @@index([businessId])
 }
 
+// Money and quantity fields are Float here (SQLite has no native Decimal
+// type). All arithmetic on them is rounded to fixed precision in
+// sale.routes.js (2dp for money, 3dp for quantity) to keep floating-point
+// drift out of totals — fine at grocery-shop scale, not bank-grade.
 model Product {
   id                String   @id @default(uuid())
   businessId        String
@@ -54,11 +55,11 @@ model Product {
   name              String
   category          String?
   sku               String?
-  unit              Unit     @default(PCS)
-  pricePerUnit      Decimal  @db.Decimal(12, 2)
-  costPerUnit       Decimal  @db.Decimal(12, 2)
-  stockQty          Decimal  @db.Decimal(12, 3)
-  lowStockThreshold Decimal  @default(0) @db.Decimal(12, 3)
+  unit              String   @default("PCS")
+  pricePerUnit      Float
+  costPerUnit       Float
+  stockQty          Float
+  lowStockThreshold Float    @default(0)
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -75,9 +76,9 @@ model Sale {
   business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   userId      String
   user        User     @relation(fields: [userId], references: [id])
-  totalAmount Decimal  @db.Decimal(12, 2)
-  totalCost   Decimal  @db.Decimal(12, 2)
-  totalProfit Decimal  @db.Decimal(12, 2)
+  totalAmount Float
+  totalCost   Float
+  totalProfit Float
   createdAt   DateTime @default(now())
 
   items SaleItem[]
@@ -93,12 +94,12 @@ model SaleItem {
   productId   String
   product     Product @relation(fields: [productId], references: [id])
   productName String
-  unit        Unit
-  quantity    Decimal @db.Decimal(12, 3)
-  unitPrice   Decimal @db.Decimal(12, 2)
-  unitCost    Decimal @db.Decimal(12, 2)
-  lineTotal   Decimal @db.Decimal(12, 2)
-  lineProfit  Decimal @db.Decimal(12, 2)
+  unit        String
+  quantity    Float
+  unitPrice   Float
+  unitCost    Float
+  lineTotal   Float
+  lineProfit  Float
 
   @@index([saleId])
   @@index([productId])

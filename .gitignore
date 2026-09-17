@@ -9,6 +9,10 @@ node_modules/
 dist/
 build/
 
+# local SQLite database (each laptop has its own data)
+*.db
+*.db-journal
+
 # misc
 .DS_Store
 npm-debug.log*

@@ -3,15 +3,20 @@
 A point-of-sale system for a grocery shop: authenticated inventory management
 and sales tracking, with per-sale profit computed automatically.
 
+Runs entirely on your own laptop by default — no internet connection needed
+after the one-time setup, no hosting account, no monthly bill. It can also be
+deployed to the web later (see **Hosting it instead**) if you decide you need
+that.
+
 Every table is scoped to a `businessId` from day one, so the same codebase
 can later host more than one shop (a reseller/multi-tenant model) without a
 schema rewrite. That mode isn't built yet — today, each business is created
-via `/register` and runs independently.
+via the **Register** page and runs independently.
 
 ## Stack
 
-- **Backend**: Node.js, Express, PostgreSQL, Prisma ORM, JWT auth (bcrypt password hashing)
-- **Frontend**: React (Vite), React Router, Axios
+- **Backend**: Node.js, Express, SQLite (via Prisma ORM), JWT auth (bcrypt password hashing)
+- **Frontend**: React (Vite), React Router, Axios — built and served by the backend as one app
 
 ## Features
 
@@ -30,76 +35,98 @@ via `/register` and runs independently.
 ## Project layout
 
 ```
-server/   Express API + Prisma schema/migrations
-client/   React (Vite) frontend
+server/            Express API + Prisma schema/migrations + serves the built frontend
+client/            React (Vite) frontend
+start-windows.bat  Double-click to run on Windows
+start-mac.command  Double-click to run on macOS
+start-linux.sh     Run on Linux
 ```
 
-## Running locally
+## Running it on your laptop
 
-### 1. Database
+You need [Node.js](https://nodejs.org) installed (the LTS version) — that's
+the only prerequisite. No database server to install; the app stores its data
+in a single SQLite file next to the code.
 
-Needs a PostgreSQL instance. Create a database and point `DATABASE_URL` at it.
+1. Download or `git clone` this repository onto your laptop.
+2. Double-click the script for your OS:
+   - **Windows**: `start-windows.bat`
+   - **Mac**: `start-mac.command` (first time, right-click → Open, since it's
+     an unsigned script — macOS will ask you to confirm once)
+   - **Linux**: run `./start-linux.sh` in a terminal
+3. First run takes a minute or two (installs dependencies, builds the app).
+   Every run after that starts in a couple of seconds.
+4. Your browser opens to `http://localhost:4000` automatically. Register your
+   real business there.
 
-### 2. Backend
+To stop it: close the terminal/server window the script opened.
+
+To use it again later, just run the same script — your data is already
+there, in `server/dev.db`.
+
+**Backing up your data** is copying one file: `server/dev.db`. Do this
+regularly (copy it to a USB drive, cloud folder, email it to yourself —
+whatever you'll actually do). If that file is lost with no copy, your
+inventory and sales history are gone.
+
+**Only this laptop can see it.** There's no sync between devices and no
+remote access — if you want to run the POS from a second computer, or have
+it reachable when you're not physically at this machine, that's the hosted
+version below, not this one.
+
+### Manual run (without the scripts)
 
 ```bash
 cd server
-cp .env.example .env   # then edit DATABASE_URL / JWT_SECRET
+cp .env.example .env      # generates nothing automatically — edit JWT_SECRET to any random string
 npm install
-npx prisma migrate dev
-npm run seed            # optional: creates a demo business + owner login + sample products
-npm run dev             # starts on :4000
+npx prisma migrate deploy
+npm run seed               # optional: demo business + owner login + sample products
+npm start                  # starts on :4000
+
+# in a separate step, once, to build the frontend the server serves:
+cd ../client
+npm install
+npm run build
 ```
 
-Seeded login (if you ran `npm run seed`): `owner@example.com` / `changeme123`
+Then open `http://localhost:4000`. Seeded login (if you ran `npm run seed`):
+`owner@example.com` / `changeme123`.
 
-### 3. Frontend
+For frontend development with hot-reload instead of a static build:
+`cd client && npm run dev` (starts on :5173, proxies `/api` to :4000 — run
+the backend with `npm run dev` too in that case).
 
-```bash
-cd client
-npm install
-npm run dev              # starts on :5173, proxies /api to :4000
-```
+## Hosting it instead
 
-Open `http://localhost:5173`. Register a new business, or log in with the
-seeded owner account above.
+If you later want this reachable from anywhere (not just this laptop), or
+usable by staff on their own devices, `render.yaml` at the repo root is a
+one-click deployment blueprint for [Render](https://render.com).
 
-## Deploying (Render, one click)
+**This requires switching the database back to PostgreSQL first** —
+`server/prisma/schema.prisma` currently has `provider = "sqlite"`, chosen
+specifically for single-laptop use. SQLite's file-based storage doesn't
+survive restarts on most hosts. Change it to `provider = "postgresql"`,
+point `DATABASE_URL` at a real Postgres instance, and re-run
+`npx prisma migrate dev` to regenerate migrations for Postgres before
+deploying — worth asking for help with this step when you're ready, rather
+than guessing at it.
 
-`render.yaml` at the repo root is a Render "Blueprint" — it describes both
-services and the database in one file, so Render provisions all three
-together instead of you configuring each by hand.
+Once that switch is done:
 
-1. Go to [render.com](https://render.com) and sign in (create an account if
-   you don't have one — this is your account, your billing, nothing to do
-   with this session).
-2. **New** → **Blueprint** → connect the `sunnyDev1161/contact-manager`
-   GitHub repo → pick the `claude/relaxed-gauss-4516nq` branch (or `main`
-   once this is merged) → **Apply**.
-3. Render creates three things: the `pos-db` Postgres database, the
-   `pos-server` backend, and the `pos-client` frontend. `JWT_SECRET` is
-   generated automatically; `DATABASE_URL` is wired to the database
-   automatically. Wait for `pos-server` to finish deploying and copy its URL
-   (shown on its dashboard page, looks like `https://pos-server-xxxx.onrender.com`).
-4. Open the `pos-client` service → **Environment** → set `VITE_API_URL` to
-   the `pos-server` URL from step 3 → save (this triggers a rebuild, since
-   Vite bakes the API URL into the frontend at build time, not runtime).
-5. Once `pos-client` finishes deploying, open its URL — that's your live
-   POS. Register your real business there (don't use the seeded demo
-   login in production).
+1. Go to [render.com](https://render.com), sign in (your account, your
+   billing).
+2. **New** → **Blueprint** → connect this GitHub repo → **Apply**. Render
+   provisions the database, backend, and frontend together.
+3. Copy the backend (`pos-server`) URL once it's deployed, set it as
+   `VITE_API_URL` on the frontend (`pos-client`) service, save (triggers a
+   rebuild).
+4. Open the frontend's URL — that's your live POS.
 
-**Two things worth knowing, not hidden in fine print:**
-- Render's free Postgres tier expires after a set period (historically ~30
-  days) and free web services spin down after inactivity, so the first
-  request after a quiet spell will be slow. Fine for trying this out; if
-  you're running a real shop on it day to day, budget for Render's paid
-  tier (a few dollars/month) so your sales data doesn't get wiped and the
-  POS doesn't lag every morning.
-- `CORS_ORIGIN` isn't set in the blueprint, so the backend defaults to
-  accepting requests from any origin. That's safe here because auth is a
-  bearer JWT (not a cookie), so there's no CSRF exposure — but once you know
-  your `pos-client` URL, set `CORS_ORIGIN` on `pos-server` to that exact URL
-  to close it down to just your frontend.
+Known trade-offs of the free tier: Render's free Postgres expires after a
+set period and free web services sleep when idle (slow first request after a
+quiet spell). Fine for trying it out; budget for the paid tier if you're
+running a real shop on it day to day.
 
 ## Data model
 
@@ -109,12 +136,10 @@ together instead of you configuring each by hand.
 - `Sale` / `SaleItem` — a completed transaction and its line items, with
   price/cost snapshotted at sale time and profit computed per line
 
-## Deploying
-
-Any host that can run Node + Postgres works (Railway, Render, Fly.io, a VPS,
-etc.). Set `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, and `PORT` as
-environment variables on the backend; point the frontend's API calls at the
-deployed backend URL (or serve both behind the same origin/proxy).
+Money and quantity fields are plain floating-point numbers (SQLite has no
+native decimal type), rounded consistently on every calculation. Fine at
+grocery-shop scale; if this ever needs bank-grade precision, that's a
+Postgres + `Decimal` change, not a rewrite.
 
 ## What's deliberately not built yet
 
@@ -122,4 +147,5 @@ deployed backend URL (or serve both behind the same origin/proxy).
   up themselves, a reseller dashboard) — the schema supports it, but the
   onboarding flow and access model for reselling this to other vendors is a
   separate project once there's a business reason to build it.
+- Multi-device sync for the laptop version — each install has its own data.
 - Receipts/printing, barcode scanning, purchase orders, supplier tracking.

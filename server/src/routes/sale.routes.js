@@ -1,13 +1,17 @@
 const express = require("express");
 const { z } = require("zod");
-const { Prisma } = require("@prisma/client");
 const prisma = require("../lib/prisma");
 const { requireAuth } = require("../middleware/auth");
 
 const router = express.Router();
-const { Decimal } = Prisma;
 
 router.use(requireAuth);
+
+// SQLite has no Decimal type, so money/quantity arithmetic happens in plain
+// JS numbers. Rounding every intermediate result keeps floating-point noise
+// (0.1 + 0.2 style drift) out of stored totals.
+const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+const round3 = n => Math.round((n + Number.EPSILON) * 1000) / 1000;
 
 const checkoutSchema = z.object({
   items: z
@@ -33,9 +37,9 @@ router.post("/", async (req, res) => {
   try {
     const sale = await prisma.$transaction(async tx => {
       const lineData = [];
-      let totalAmount = new Decimal(0);
-      let totalCost = new Decimal(0);
-      let totalProfit = new Decimal(0);
+      let totalAmount = 0;
+      let totalCost = 0;
+      let totalProfit = 0;
 
       for (const item of items) {
         const product = await tx.product.findFirst({
@@ -45,10 +49,17 @@ router.post("/", async (req, res) => {
           throw new Error(`PRODUCT_NOT_FOUND:${item.productId}`);
         }
 
-        const quantity = new Decimal(item.quantity);
+        const quantity = round3(item.quantity);
+        if (product.stockQty < quantity) {
+          throw new Error(`INSUFFICIENT_STOCK:${product.name}`);
+        }
+
+        // Optimistic lock: only write if stockQty still matches what we just
+        // read, so a concurrent sale on the same product can't double-spend
+        // stock between the read and the write.
         const updated = await tx.product.updateMany({
-          where: { id: product.id, stockQty: { gte: quantity } },
-          data: { stockQty: { decrement: quantity } }
+          where: { id: product.id, stockQty: product.stockQty },
+          data: { stockQty: round3(product.stockQty - quantity) }
         });
         if (updated.count !== 1) {
           throw new Error(`INSUFFICIENT_STOCK:${product.name}`);
@@ -56,13 +67,13 @@ router.post("/", async (req, res) => {
 
         const unitPrice = product.pricePerUnit;
         const unitCost = product.costPerUnit;
-        const lineTotal = unitPrice.mul(quantity);
-        const lineCost = unitCost.mul(quantity);
-        const lineProfit = lineTotal.sub(lineCost);
+        const lineTotal = round2(unitPrice * quantity);
+        const lineCost = round2(unitCost * quantity);
+        const lineProfit = round2(lineTotal - lineCost);
 
-        totalAmount = totalAmount.add(lineTotal);
-        totalCost = totalCost.add(lineCost);
-        totalProfit = totalProfit.add(lineProfit);
+        totalAmount = round2(totalAmount + lineTotal);
+        totalCost = round2(totalCost + lineCost);
+        totalProfit = round2(totalProfit + lineProfit);
 
         lineData.push({
           productId: product.id,
