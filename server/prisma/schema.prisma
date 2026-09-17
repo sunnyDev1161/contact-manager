@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  STAFF
+}
+
+enum Unit {
+  PCS
+  KG
+  G
+  LITRE
+  ML
+}
+
+// A Business is a tenant. Every table below is scoped to one, so the schema
+// is already tenant-safe even though the app is currently run for one shop.
+model Business {
+  id        String    @id @default(uuid())
+  name      String
+  createdAt DateTime  @default(now())
+
+  users    User[]
+  products Product[]
+  sales    Sale[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  businessId   String
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(STAFF)
+  createdAt    DateTime @default(now())
+
+  sales Sale[]
+
+  @@index([businessId])
+}
+
+model Product {
+  id                String   @id @default(uuid())
+  businessId        String
+  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name              String
+  category          String?
+  sku               String?
+  unit              Unit     @default(PCS)
+  pricePerUnit      Decimal  @db.Decimal(12, 2)
+  costPerUnit       Decimal  @db.Decimal(12, 2)
+  stockQty          Decimal  @db.Decimal(12, 3)
+  lowStockThreshold Decimal  @default(0) @db.Decimal(12, 3)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  saleItems SaleItem[]
+
+  @@index([businessId])
+  @@unique([businessId, sku])
+}
+
+model Sale {
+  id          String   @id @default(uuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  totalAmount Decimal  @db.Decimal(12, 2)
+  totalCost   Decimal  @db.Decimal(12, 2)
+  totalProfit Decimal  @db.Decimal(12, 2)
+  createdAt   DateTime @default(now())
+
+  items SaleItem[]
+
+  @@index([businessId])
+  @@index([createdAt])
+}
+
+model SaleItem {
+  id          String  @id @default(uuid())
+  saleId      String
+  sale        Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+  productName String
+  unit        Unit
+  quantity    Decimal @db.Decimal(12, 3)
+  unitPrice   Decimal @db.Decimal(12, 2)
+  unitCost    Decimal @db.Decimal(12, 2)
+  lineTotal   Decimal @db.Decimal(12, 2)
+  lineProfit  Decimal @db.Decimal(12, 2)
+
+  @@index([saleId])
+  @@index([productId])
+}
