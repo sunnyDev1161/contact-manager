@@ -1,0 +1,83 @@
+name: CI
+
+# Runs on every PR targeting master, and on master itself (so a direct
+# push — before branch protection is turned on, or afterward if someone
+# with bypass rights pushes straight to it — still gets checked).
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+jobs:
+  client-build:
+    name: Frontend builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Install dependencies
+        working-directory: client
+        run: npm ci
+      - name: Build
+        working-directory: client
+        run: npm run build
+
+  server-check:
+    name: Backend migrates, seeds, and starts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install dependencies
+        working-directory: server
+        run: npm ci
+      - name: Apply migrations to a fresh database
+        working-directory: server
+        env:
+          DATABASE_URL: file:./ci-test.db
+        run: npx prisma migrate deploy
+      - name: Run seed script
+        working-directory: server
+        env:
+          DATABASE_URL: file:./ci-test.db
+        run: node prisma/seed.js
+      - name: Start server and check /api/health
+        working-directory: server
+        env:
+          DATABASE_URL: file:./ci-test.db
+          JWT_SECRET: ci-test-secret-do-not-use-in-production
+          PORT: 4001
+        run: |
+          node src/index.js &
+          SERVER_PID=$!
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:4001/api/health > /dev/null; then
+              echo "Server healthy after ${i} attempt(s)"
+              kill "$SERVER_PID"
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "Server did not become healthy in time"
+          kill "$SERVER_PID" 2>/dev/null || true
+          exit 1
+
+  desktop-syntax-check:
+    name: Desktop shell has no syntax errors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check main.js
+        run: node --check desktop/main.js
