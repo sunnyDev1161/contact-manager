@@ -59,6 +59,7 @@ export default function PrintableBill({ sale, business, cashierName }) {
         <div>
           <div><strong>REF:</strong> {billNo}</div>
           <div><strong>Cashier:</strong> {cashierName}</div>
+          <div><strong>Sold To:</strong> {sale.customer ? sale.customer.shopName : 'Walk-in'}</div>
         </div>
         <div className="bill-meta-right">
           <div><strong>DATE:</strong> {formatDateTime(sale.createdAt)}</div>
@@ -94,6 +95,12 @@ export default function PrintableBill({ sale, business, cashierName }) {
       <div className="bill-total-row">
         Total ({sale.saleType === 'TRADE' ? 'Trade Price' : 'Retail Price'}): {money(sale.totalAmount)}
       </div>
+      {sale.totalAmount - sale.amountPaid > 0.001 && (
+        <div className="bill-credit-row">
+          <div>Paid now: {money(sale.amountPaid)}</div>
+          <div>Credit added to account: {money(sale.totalAmount - sale.amountPaid)}</div>
+        </div>
+      )}
 
       <div className="bill-rule-thin bill-footer-rule" />
       <div className="bill-footer">

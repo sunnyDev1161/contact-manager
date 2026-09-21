@@ -28,9 +28,11 @@ model Business {
   phone       String? // free text — shop may list more than one number
   createdAt   DateTime @default(now())
 
-  users    User[]
-  products Product[]
-  sales    Sale[]
+  users         User[]
+  products      Product[]
+  sales         Sale[]
+  customers     Customer[]
+  ledgerEntries LedgerEntry[]
 }
 
 model User {
@@ -43,9 +45,54 @@ model User {
   role         String   @default("STAFF")
   createdAt    DateTime @default(now())
 
-  sales Sale[]
+  sales         Sale[]
+  ledgerEntries LedgerEntry[] // payments/credits this user recorded
 
   @@index([businessId])
+}
+
+// A shopkeeper/wholesale customer this business sells to on account. Not
+// every sale has one (walk-in cash sales don't), but any sale sold on
+// credit must, since credit is tracked per customer.
+model Customer {
+  id             String   @id @default(uuid())
+  businessId     String
+  business       Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  shopName       String
+  shopkeeperName String?
+  phone          String?
+  address        String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  sales         Sale[]
+  ledgerEntries LedgerEntry[]
+
+  @@index([businessId])
+}
+
+// The credit ledger. Every sale-on-credit and every payment received is its
+// own row here — balance owed is SUM(SALE) - SUM(PAYMENT), computed on read,
+// never stored as a single mutable number. That way it can never drift out
+// of sync with reality, and there's always a full history to point to if a
+// shopkeeper disputes what they owe.
+model LedgerEntry {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type       String // "SALE" (increases balance owed) | "PAYMENT" (decreases it)
+  amount     Float // always positive; `type` determines the sign
+  saleId     String?
+  sale       Sale?    @relation(fields: [saleId], references: [id])
+  note       String?
+  recordedByUserId String
+  recordedBy User     @relation(fields: [recordedByUserId], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@index([businessId])
+  @@index([customerId])
 }
 
 // Money and quantity fields are Float here (SQLite has no native Decimal
@@ -81,21 +128,26 @@ model Product {
 }
 
 model Sale {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   businessId  String
-  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  saleType    String   @default("RETAIL") // "RETAIL" | "TRADE" — which price basis this whole sale was charged at
+  user        User      @relation(fields: [userId], references: [id])
+  customerId  String? // set when this sale is attributed to a shopkeeper account; null for a walk-in/cash sale
+  customer    Customer? @relation(fields: [customerId], references: [id])
+  saleType    String    @default("RETAIL") // "RETAIL" | "TRADE" — which price basis this whole sale was charged at
   totalAmount Float
   totalCost   Float
   totalProfit Float
-  createdAt   DateTime @default(now())
+  amountPaid  Float     @default(0) // cash actually collected at checkout; totalAmount - amountPaid is what was put on the customer's credit (0 for a fully-paid sale)
+  createdAt   DateTime  @default(now())
 
-  items SaleItem[]
+  items         SaleItem[]
+  ledgerEntries LedgerEntry[]
 
   @@index([businessId])
   @@index([createdAt])
+  @@index([customerId])
 }
 
 model SaleItem {

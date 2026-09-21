@@ -45,6 +45,10 @@ export default function POS() {
   const [checkingOut, setCheckingOut] = useState(false)
   const [lastSale, setLastSale] = useState(null)
   const [business, setBusiness] = useState(null)
+  const [customers, setCustomers] = useState([])
+  const [customer, setCustomer] = useState(null) // selected Customer object, or null for walk-in
+  const [customerQuery, setCustomerQuery] = useState('')
+  const [showCustomerPicker, setShowCustomerPicker] = useState(false)
   const codeInputRef = useRef(null)
 
   async function loadProducts() {
@@ -52,7 +56,13 @@ export default function POS() {
     setProducts(data.products)
   }
 
+  async function loadCustomers() {
+    const { data } = await api.get('/customers')
+    setCustomers(data.customers)
+  }
+
   useEffect(() => { loadProducts() }, [])
+  useEffect(() => { loadCustomers() }, [])
   useEffect(() => {
     api.get('/business').then(({ data }) => setBusiness(data.business)).catch(() => {})
   }, [])
@@ -100,6 +110,29 @@ export default function POS() {
 
   function linePrice(l) {
     return saleType === 'TRADE' ? l.tradePrice : l.retailPrice
+  }
+
+  const customerMatches = useMemo(() => {
+    const q = customerQuery.trim().toLowerCase()
+    if (!q) return customers
+    return customers.filter(c =>
+      c.shopName.toLowerCase().includes(q) ||
+      (c.shopkeeperName || '').toLowerCase().includes(q) ||
+      (c.phone || '').includes(q)
+    )
+  }, [customers, customerQuery])
+
+  function pickCustomer(c) {
+    setCustomer(c)
+    setCustomerQuery('')
+    setShowCustomerPicker(false)
+    // Shopkeeper accounts almost always buy at trade price — nudge the
+    // toggle, but the cashier can still switch back to Retail manually.
+    setSaleType('TRADE')
+  }
+
+  function clearCustomer() {
+    setCustomer(null)
   }
 
   function handleCodeKeyDown(e) {
@@ -153,12 +186,13 @@ export default function POS() {
 
   function holdSale() {
     if (cart.length === 0 || !user?.businessId) return
-    const next = [{ id: crypto.randomUUID(), savedAt: Date.now(), cart, saleType }, ...heldBills]
+    const next = [{ id: crypto.randomUUID(), savedAt: Date.now(), cart, saleType, customer }, ...heldBills]
     setHeldBills(next)
     saveHeld(user.businessId, next)
     setCart([])
     setSelectedId(null)
     setKeypadValue('')
+    setCustomer(null)
     setMessage('Sale held.')
   }
 
@@ -167,6 +201,7 @@ export default function POS() {
     if (!bill) return
     setCart(bill.cart)
     setSaleType(bill.saleType || 'RETAIL')
+    setCustomer(bill.customer || null)
     const next = heldBills.filter(h => h.id !== id)
     setHeldBills(next)
     saveHeld(user.businessId, next)
@@ -182,20 +217,34 @@ export default function POS() {
   const total = cart.reduce((sum, l) => sum + linePrice(l) * (Number(l.qty) || 0), 0)
   const tendered = parseFloat(cashTendered) || 0
   const change = tendered - total
+  // A walk-in (no customer) must tender the full total — there's no account
+  // to put a shortfall on. A customer-attached sale can be paid any amount;
+  // whatever's short becomes credit on their tab.
+  const canConfirm = customer ? tendered >= 0 : tendered >= total
 
   async function completeSale() {
     setError('')
     setCheckingOut(true)
     try {
       const items = cart.map(l => ({ productId: l.productId, quantity: Number(l.qty) }))
-      const { data } = await api.post('/sales', { saleType, items })
-      setMessage(`Sale complete: total ${money(data.sale.totalAmount)}, profit ${money(data.sale.totalProfit)}`)
+      const { data } = await api.post('/sales', {
+        saleType,
+        items,
+        customerId: customer?.id || null,
+        amountTendered: tendered
+      })
+      const creditNote = data.sale.totalAmount - data.sale.amountPaid > 0
+        ? `, ${money(data.sale.totalAmount - data.sale.amountPaid)} added to ${customer.shopName}'s account`
+        : ''
+      setMessage(`Sale complete: total ${money(data.sale.totalAmount)}, profit ${money(data.sale.totalProfit)}${creditNote}`)
       setLastSale(data.sale)
       setCart([])
       setSelectedId(null)
       setShowPayment(false)
       setCashTendered('')
+      setCustomer(null)
       loadProducts()
+      loadCustomers()
     } catch (err) {
       setError(err.response?.data?.error || 'Checkout failed')
     } finally {
@@ -250,6 +299,39 @@ export default function POS() {
             {lastSale && <button className="print-bill-btn" onClick={() => window.print()}>Print Bill</button>}
           </div>
         )}
+
+        <div className="customer-picker">
+          {customer ? (
+            <div className="customer-selected">
+              <div>
+                <strong>{customer.shopName}</strong>
+                {customer.balance > 0 && <span className="customer-balance"> owes {money(customer.balance)}</span>}
+              </div>
+              <button className="link" onClick={clearCustomer}>Change</button>
+            </div>
+          ) : (
+            <div className="customer-search">
+              <input
+                placeholder="Customer (shop name) — leave blank for walk-in"
+                value={customerQuery}
+                onChange={e => { setCustomerQuery(e.target.value); setShowCustomerPicker(true) }}
+                onFocus={() => setShowCustomerPicker(true)}
+              />
+              {showCustomerPicker && (
+                <div className="customer-dropdown">
+                  {customerMatches.length === 0 && <div className="customer-dropdown-empty">No customers match — add one in Customers.</div>}
+                  {customerMatches.map(c => (
+                    <button key={c.id} className="customer-option" onClick={() => pickCustomer(c)}>
+                      <span>{c.shopName}</span>
+                      {c.balance > 0 && <span className="customer-balance">{money(c.balance)}</span>}
+                    </button>
+                  ))}
+                  <button className="customer-dropdown-close" onClick={() => setShowCustomerPicker(false)}>Close</button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="sale-type-toggle">
           <button
@@ -333,7 +415,7 @@ export default function POS() {
                 <div key={h.id} className="held-row">
                   <div>
                     <div>{h.cart.length} item(s) — {money(billTotal)} ({h.saleType === 'TRADE' ? 'Trade' : 'Retail'})</div>
-                    <small>{new Date(h.savedAt).toLocaleTimeString()}</small>
+                    <small>{h.customer ? h.customer.shopName : 'Walk-in'} • {new Date(h.savedAt).toLocaleTimeString()}</small>
                   </div>
                   <div className="held-actions">
                     <button onClick={() => recallHeld(h.id)}>Recall</button>
@@ -352,18 +434,31 @@ export default function POS() {
           <div className="overlay-panel payment-panel" onClick={e => e.stopPropagation()}>
             <h2>Payment</h2>
             <div className="payment-total">Due: {money(total)}</div>
+            {customer && <div className="payment-customer">For: {customer.shopName}</div>}
             <div className="payment-row">
               <span>Cash tendered</span>
               <span className="payment-tendered">Rs. {cashTendered || '0'}</span>
             </div>
-            <div className={`payment-row ${change < 0 ? 'negative' : ''}`}>
-              <span>{change < 0 ? 'Still due' : 'Change'}</span>
-              <span>{money(Math.abs(change))}</span>
-            </div>
+            {change >= 0 ? (
+              <div className="payment-row">
+                <span>Change</span>
+                <span>{money(change)}</span>
+              </div>
+            ) : customer ? (
+              <div className="payment-row credit">
+                <span>Credit (added to {customer.shopName}'s account)</span>
+                <span>{money(Math.abs(change))}</span>
+              </div>
+            ) : (
+              <div className="payment-row negative">
+                <span>Still due — select a customer to allow credit</span>
+                <span>{money(Math.abs(change))}</span>
+              </div>
+            )}
             <NumericKeypad value={cashTendered} onChange={setCashTendered} />
             <div className="payment-actions">
               <button className="secondary" onClick={() => setShowPayment(false)} disabled={checkingOut}>Cancel</button>
-              <button className="pay-btn" onClick={completeSale} disabled={checkingOut || tendered < total}>
+              <button className="pay-btn" onClick={completeSale} disabled={checkingOut || !canConfirm}>
                 {checkingOut ? 'Processing…' : 'Confirm Sale'}
               </button>
             </div>

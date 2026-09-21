@@ -9,6 +9,7 @@ import Inventory from './pages/Inventory'
 import SalesHistory from './pages/SalesHistory'
 import Staff from './pages/Staff'
 import Settings from './pages/Settings'
+import Customers from './pages/Customers'
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
         >
           <Route path="/pos" element={<POS />} />
           <Route path="/sales" element={<SalesHistory />} />
+          <Route path="/customers" element={<Customers />} />
           <Route
             path="/inventory"
             element={

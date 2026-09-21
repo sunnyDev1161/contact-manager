@@ -181,6 +181,33 @@ button.link.danger { color: var(--danger); }
   padding: 1rem; position: sticky; top: 1rem; display: flex; flex-direction: column; gap: 0.85rem;
 }
 
+.customer-picker { position: relative; }
+.customer-search input {
+  width: 100%; background: #151a22; border: 1px solid #2a3341; color: #e5e7eb;
+  border-radius: 6px; padding: 0.6rem;
+}
+.customer-selected {
+  display: flex; justify-content: space-between; align-items: center;
+  background: #151a22; border-radius: 6px; padding: 0.6rem 0.8rem; font-size: 0.9rem;
+}
+.customer-selected button.link { color: var(--primary); }
+.customer-balance { color: #fca5a5; font-size: 0.8rem; margin-left: 0.4rem; }
+.customer-dropdown {
+  position: absolute; top: 100%; left: 0; right: 0; margin-top: 0.3rem;
+  background: #151a22; border: 1px solid #2a3341; border-radius: 6px; z-index: 10;
+  max-height: 220px; overflow-y: auto;
+}
+.customer-option {
+  display: flex; justify-content: space-between; width: 100%; background: none; border: none;
+  color: #e5e7eb; padding: 0.55rem 0.8rem; text-align: left; font-size: 0.88rem;
+  border-bottom: 1px solid #232a35;
+}
+.customer-option:hover { background: #232a35; }
+.customer-dropdown-empty { padding: 0.6rem 0.8rem; color: #8b95a5; font-size: 0.82rem; }
+.customer-dropdown-close { width: 100%; background: #2a3341; color: #8b95a5; border: none; padding: 0.4rem; font-size: 0.8rem; }
+.payment-customer { color: #8b95a5; font-size: 0.85rem; margin-bottom: 0.5rem; }
+.payment-row.credit { color: #fbbf24; }
+
 .sale-type-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
 .sale-type-btn { background: #2a3341; color: #8b95a5; border: none; border-radius: 8px; padding: 0.6rem; font-weight: 700; font-size: 0.9rem; }
 .sale-type-btn.active { background: var(--primary); color: white; }
@@ -268,6 +295,37 @@ button.link.danger { color: var(--danger); }
 .payment-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.75rem; }
 .payment-actions .secondary { background: #2a3341; color: #e5e7eb; border: none; border-radius: 8px; font-weight: 600; }
 
+/* Customers / credit ledger */
+.balance-owed { color: var(--danger); font-weight: 700; }
+.balance-clear { color: var(--muted); }
+
+.ledger-panel { max-width: 480px; }
+.ledger-balance { font-size: 1.1rem; margin-bottom: 1rem; }
+.ledger-balance strong { color: #fca5a5; }
+
+.ledger-payment-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem; }
+.ledger-payment-form input {
+  background: #151a22; border: 1px solid #2a3341; color: #e5e7eb; border-radius: 6px; padding: 0.5rem;
+}
+.ledger-payment-form button {
+  grid-column: 1 / -1; background: var(--success); color: white; border: none; border-radius: 6px;
+  padding: 0.55rem; font-weight: 700;
+}
+
+.ledger-list { max-height: 300px; overflow-y: auto; }
+.ledger-row {
+  display: flex; justify-content: space-between; align-items: start; padding: 0.6rem 0;
+  border-bottom: 1px solid #232a35; font-size: 0.9rem;
+}
+.ledger-tag { font-size: 0.75rem; font-weight: 700; padding: 0.1rem 0.5rem; border-radius: 999px; }
+.ledger-tag.credit { background: #4c1d1d; color: #fca5a5; }
+.ledger-tag.payment { background: #14332180; color: #86efac; }
+.ledger-note { color: #8b95a5; font-size: 0.85rem; }
+.ledger-meta { color: #6b7688; font-size: 0.75rem; margin-top: 0.2rem; }
+.ledger-amount { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ledger-amount.credit { color: #fca5a5; }
+.ledger-amount.payment { color: #86efac; }
+
 /* Stats */
 .preset-row { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
 .preset-btn { background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 0.4rem 0.9rem; font-size: 0.85rem; }
@@ -354,8 +412,11 @@ button.link.danger { color: var(--danger); }
     margin-top: 1rem; font-weight: 700; font-size: 1.1rem; text-align: right;
     color: var(--navy); border-top: 2px solid var(--navy); padding-top: 0.5rem;
   }
+  .bill-credit-row {
+    margin-top: 0.4rem; text-align: right; font-size: 0.85rem; color: #7a4a00;
+  }
 
-  .bill-footer-rule { margin-top: 2.5rem; margin-bottom: 0.5rem; }
+  .bill-footer-rule { margin-top: 2rem; margin-bottom: 0.5rem; }
   .bill-footer { text-align: center; font-size: 0.8rem; color: #333; }
   .bill-footer strong { color: var(--navy); }
   .bill-thanks { text-align: center; font-size: 0.75rem; color: #777; margin-top: 0.4rem; font-style: italic; }

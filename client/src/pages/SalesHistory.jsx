@@ -91,18 +91,22 @@ export default function SalesHistory() {
 
       {loading ? <p>Loading…</p> : (
         <table className="data-table">
-          <thead><tr><th>Date</th><th>Cashier</th><th>Items</th><th>Total</th><th>Profit</th></tr></thead>
+          <thead><tr><th>Date</th><th>Customer</th><th>Cashier</th><th>Items</th><th>Total</th><th>Paid</th><th>Profit</th></tr></thead>
           <tbody>
             {sales.map(s => (
               <tr key={s.id}>
                 <td>{new Date(s.createdAt).toLocaleString()}</td>
+                <td>{s.customer ? s.customer.shopName : 'Walk-in'}</td>
                 <td>{s.user?.name}</td>
                 <td>{s.items.map(i => `${i.productName} ×${i.quantity}`).join(', ')}</td>
                 <td>{money(s.totalAmount)}</td>
+                <td className={s.totalAmount - s.amountPaid > 0.001 ? 'balance-owed' : ''}>
+                  {money(s.amountPaid)}{s.totalAmount - s.amountPaid > 0.001 && ` (${money(s.totalAmount - s.amountPaid)} credit)`}
+                </td>
                 <td>{money(s.totalProfit)}</td>
               </tr>
             ))}
-            {sales.length === 0 && <tr><td colSpan={5}>No sales in this range.</td></tr>}
+            {sales.length === 0 && <tr><td colSpan={7}>No sales in this range.</td></tr>}
           </tbody>
         </table>
       )}

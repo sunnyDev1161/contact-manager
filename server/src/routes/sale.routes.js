@@ -15,6 +15,8 @@ const round3 = n => Math.round((n + Number.EPSILON) * 1000) / 1000;
 
 const checkoutSchema = z.object({
   saleType: z.enum(["RETAIL", "TRADE"]).default("RETAIL"),
+  customerId: z.string().min(1).optional().nullable(),
+  amountTendered: z.number().nonnegative(),
   items: z
     .array(
       z.object({
@@ -32,11 +34,18 @@ router.post("/", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });
   }
-  const { items, saleType } = parsed.data;
+  const { items, saleType, customerId, amountTendered } = parsed.data;
   const businessId = req.user.businessId;
 
   try {
     const sale = await prisma.$transaction(async tx => {
+      if (customerId) {
+        const customer = await tx.customer.findFirst({
+          where: { id: customerId, businessId, isActive: true }
+        });
+        if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
+      }
+
       const lineData = [];
       let totalAmount = 0;
       let totalCost = 0;
@@ -94,18 +103,47 @@ router.post("/", async (req, res) => {
         });
       }
 
-      return tx.sale.create({
+      // A walk-in (no customer attached) can't be extended credit — there's
+      // no account to put the shortfall on — so it must be paid in full.
+      // A customer-attached sale can be paid any amount from 0 up to the
+      // total; whatever isn't covered becomes a SALE ledger entry against
+      // their account.
+      if (!customerId && amountTendered < totalAmount) {
+        throw new Error("WALKIN_MUST_BE_PAID_IN_FULL");
+      }
+      const amountPaid = round2(Math.min(amountTendered, totalAmount));
+      const creditAmount = round2(totalAmount - amountPaid);
+
+      const createdSale = await tx.sale.create({
         data: {
           businessId,
           userId: req.user.id,
+          customerId: customerId || null,
           saleType,
           totalAmount,
           totalCost,
           totalProfit,
+          amountPaid,
           items: { create: lineData }
         },
-        include: { items: true }
+        include: { items: true, customer: { select: { shopName: true } } }
       });
+
+      if (creditAmount > 0) {
+        await tx.ledgerEntry.create({
+          data: {
+            businessId,
+            customerId,
+            type: "SALE",
+            amount: creditAmount,
+            saleId: createdSale.id,
+            note: `Credit from sale`,
+            recordedByUserId: req.user.id
+          }
+        });
+      }
+
+      return createdSale;
     });
 
     res.status(201).json({ sale });
@@ -116,6 +154,12 @@ router.post("/", async (req, res) => {
     if (typeof err.message === "string" && err.message.startsWith("INSUFFICIENT_STOCK:")) {
       const name = err.message.split(":")[1];
       return res.status(409).json({ error: `Not enough stock for "${name}".` });
+    }
+    if (err.message === "CUSTOMER_NOT_FOUND") {
+      return res.status(404).json({ error: "Selected customer was not found." });
+    }
+    if (err.message === "WALKIN_MUST_BE_PAID_IN_FULL") {
+      return res.status(400).json({ error: "A walk-in sale (no customer selected) must be paid in full. Select a customer to allow credit." });
     }
     throw err;
   }
@@ -132,7 +176,7 @@ router.get("/", async (req, res) => {
 
   const sales = await prisma.sale.findMany({
     where,
-    include: { items: true, user: { select: { name: true, email: true } } },
+    include: { items: true, user: { select: { name: true, email: true } }, customer: { select: { shopName: true } } },
     orderBy: { createdAt: "desc" },
     take: limit ? Math.min(Number(limit), 200) : 50
   });
