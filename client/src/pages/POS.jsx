@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import api from '../api'
 import { useAuth } from '../context/AuthContext'
 import NumericKeypad from '../components/NumericKeypad'
+import PrintableBill from '../components/PrintableBill'
+import { money } from '../format'
 
 function heldKey(businessId) {
   return `pos_held_bills_${businessId}`
@@ -30,7 +32,8 @@ export default function POS() {
   const [category, setCategory] = useState('All')
   const [codeInput, setCodeInput] = useState('')
   const [scanError, setScanError] = useState('')
-  const [cart, setCart] = useState([]) // { productId, name, unit, price, qty }
+  const [cart, setCart] = useState([]) // { productId, name, unit, retailPrice, tradePrice, qty }
+  const [saleType, setSaleType] = useState('RETAIL') // 'RETAIL' | 'TRADE' — which price basis this whole sale charges
   const [selectedId, setSelectedId] = useState(null)
   const [keypadValue, setKeypadValue] = useState('')
   const [heldBills, setHeldBills] = useState([])
@@ -40,6 +43,7 @@ export default function POS() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [checkingOut, setCheckingOut] = useState(false)
+  const [lastSale, setLastSale] = useState(null)
   const codeInputRef = useRef(null)
 
   async function loadProducts() {
@@ -67,6 +71,10 @@ export default function POS() {
     })
   }, [products, category, codeInput])
 
+  // Prices are captured from the product record at add-time so a later
+  // price edit in Inventory doesn't retroactively change an in-progress
+  // sale. Which of the two is actually charged is decided by saleType at
+  // total/checkout time, not baked into the line here.
   function addToCart(p, qty = 1) {
     setScanError('')
     setMessage('')
@@ -75,8 +83,19 @@ export default function POS() {
       if (existing) {
         return prev.map(l => l.productId === p.id ? { ...l, qty: l.qty + qty } : l)
       }
-      return [...prev, { productId: p.id, name: p.name, unit: p.unit, price: Number(p.pricePerUnit), qty }]
+      return [...prev, {
+        productId: p.id,
+        name: p.name,
+        unit: p.unit,
+        retailPrice: Number(p.pricePerUnit),
+        tradePrice: Number(p.tradePricePerUnit),
+        qty
+      }]
     })
+  }
+
+  function linePrice(l) {
+    return saleType === 'TRADE' ? l.tradePrice : l.retailPrice
   }
 
   function handleCodeKeyDown(e) {
@@ -130,7 +149,7 @@ export default function POS() {
 
   function holdSale() {
     if (cart.length === 0 || !user?.businessId) return
-    const next = [{ id: crypto.randomUUID(), savedAt: Date.now(), cart }, ...heldBills]
+    const next = [{ id: crypto.randomUUID(), savedAt: Date.now(), cart, saleType }, ...heldBills]
     setHeldBills(next)
     saveHeld(user.businessId, next)
     setCart([])
@@ -143,6 +162,7 @@ export default function POS() {
     const bill = heldBills.find(h => h.id === id)
     if (!bill) return
     setCart(bill.cart)
+    setSaleType(bill.saleType || 'RETAIL')
     const next = heldBills.filter(h => h.id !== id)
     setHeldBills(next)
     saveHeld(user.businessId, next)
@@ -155,7 +175,7 @@ export default function POS() {
     saveHeld(user.businessId, next)
   }
 
-  const total = cart.reduce((sum, l) => sum + l.price * (Number(l.qty) || 0), 0)
+  const total = cart.reduce((sum, l) => sum + linePrice(l) * (Number(l.qty) || 0), 0)
   const tendered = parseFloat(cashTendered) || 0
   const change = tendered - total
 
@@ -164,8 +184,9 @@ export default function POS() {
     setCheckingOut(true)
     try {
       const items = cart.map(l => ({ productId: l.productId, quantity: Number(l.qty) }))
-      const { data } = await api.post('/sales', { items })
-      setMessage(`Sale complete: total ₹${Number(data.sale.totalAmount).toFixed(2)}, profit ₹${Number(data.sale.totalProfit).toFixed(2)}`)
+      const { data } = await api.post('/sales', { saleType, items })
+      setMessage(`Sale complete: total ${money(data.sale.totalAmount)}, profit ${money(data.sale.totalProfit)}`)
+      setLastSale(data.sale)
       setCart([])
       setSelectedId(null)
       setShowPayment(false)
@@ -208,7 +229,9 @@ export default function POS() {
           {filtered.map(p => (
             <button key={p.id} className="product-tile" onClick={() => addToCart(p)}>
               <div className="product-name">{p.name}</div>
-              <div className="product-meta">₹{p.pricePerUnit} / {p.unit}</div>
+              <div className="product-meta">
+                {money(saleType === 'TRADE' ? p.tradePricePerUnit : p.pricePerUnit)} / {p.unit}
+              </div>
               <div className="product-stock">Stock: {p.stockQty}</div>
             </button>
           ))}
@@ -217,7 +240,27 @@ export default function POS() {
       </div>
 
       <div className="terminal-register">
-        {message && <div className="success-banner">{message}</div>}
+        {message && (
+          <div className="success-banner">
+            {message}
+            {lastSale && <button className="print-bill-btn" onClick={() => window.print()}>Print Bill</button>}
+          </div>
+        )}
+
+        <div className="sale-type-toggle">
+          <button
+            className={saleType === 'RETAIL' ? 'sale-type-btn active' : 'sale-type-btn'}
+            onClick={() => setSaleType('RETAIL')}
+          >
+            Retail Sale
+          </button>
+          <button
+            className={saleType === 'TRADE' ? 'sale-type-btn active trade' : 'sale-type-btn trade'}
+            onClick={() => setSaleType('TRADE')}
+          >
+            Trade Sale
+          </button>
+        </div>
 
         <div className="receipt">
           <div className="receipt-header">
@@ -233,9 +276,9 @@ export default function POS() {
                 className={l.productId === selectedId ? 'receipt-row selected' : 'receipt-row'}
                 onClick={() => selectLine(l.productId)}
               >
-                <span className="receipt-name">{l.name}<small>₹{l.price}/{l.unit}</small></span>
+                <span className="receipt-name">{l.name}<small>{money(linePrice(l))}/{l.unit}</small></span>
                 <span className="receipt-qty">{l.qty}</span>
-                <span className="receipt-amount">₹{(l.price * l.qty).toFixed(2)}</span>
+                <span className="receipt-amount">{money(linePrice(l) * l.qty)}</span>
                 <button className="receipt-remove" onClick={e => { e.stopPropagation(); removeLine(l.productId) }}>×</button>
               </div>
             ))}
@@ -258,7 +301,7 @@ export default function POS() {
 
         <div className="total-display">
           <span>TOTAL</span>
-          <span>₹{total.toFixed(2)}</span>
+          <span>{money(total)}</span>
         </div>
 
         {error && <div className="error-banner">{error}</div>}
@@ -271,7 +314,7 @@ export default function POS() {
           <button className="fn-btn fn-clear" onClick={clearSale} disabled={cart.length === 0}>Clear Sale</button>
         </div>
         <button className="pay-btn" onClick={() => setShowPayment(true)} disabled={cart.length === 0}>
-          Pay ₹{total.toFixed(2)}
+          Pay {money(total)}
         </button>
       </div>
 
@@ -281,11 +324,11 @@ export default function POS() {
             <h2>Held Sales</h2>
             {heldBills.length === 0 && <p>Nothing held.</p>}
             {heldBills.map(h => {
-              const billTotal = h.cart.reduce((s, l) => s + l.price * l.qty, 0)
+              const billTotal = h.cart.reduce((s, l) => s + (h.saleType === 'TRADE' ? l.tradePrice : l.retailPrice) * l.qty, 0)
               return (
                 <div key={h.id} className="held-row">
                   <div>
-                    <div>{h.cart.length} item(s) — ₹{billTotal.toFixed(2)}</div>
+                    <div>{h.cart.length} item(s) — {money(billTotal)} ({h.saleType === 'TRADE' ? 'Trade' : 'Retail'})</div>
                     <small>{new Date(h.savedAt).toLocaleTimeString()}</small>
                   </div>
                   <div className="held-actions">
@@ -304,14 +347,14 @@ export default function POS() {
         <div className="overlay" onClick={() => !checkingOut && setShowPayment(false)}>
           <div className="overlay-panel payment-panel" onClick={e => e.stopPropagation()}>
             <h2>Payment</h2>
-            <div className="payment-total">Due: ₹{total.toFixed(2)}</div>
+            <div className="payment-total">Due: {money(total)}</div>
             <div className="payment-row">
               <span>Cash tendered</span>
-              <span className="payment-tendered">₹{cashTendered || '0'}</span>
+              <span className="payment-tendered">Rs. {cashTendered || '0'}</span>
             </div>
             <div className={`payment-row ${change < 0 ? 'negative' : ''}`}>
               <span>{change < 0 ? 'Still due' : 'Change'}</span>
-              <span>₹{Math.abs(change).toFixed(2)}</span>
+              <span>{money(Math.abs(change))}</span>
             </div>
             <NumericKeypad value={cashTendered} onChange={setCashTendered} />
             <div className="payment-actions">
@@ -323,6 +366,8 @@ export default function POS() {
           </div>
         </div>
       )}
+
+      <PrintableBill sale={lastSale} businessName={user?.businessName} cashierName={user?.name} />
     </div>
   )
 }

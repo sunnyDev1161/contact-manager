@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import api from '../api'
+import { money } from '../format'
 
 function toDateInput(d) {
   return d.toISOString().slice(0, 10)
@@ -50,9 +51,9 @@ export default function SalesHistory() {
       {summary && (
         <div className="stat-row">
           <div className="stat-card"><div className="stat-label">Sales</div><div className="stat-value">{summary.salesCount}</div></div>
-          <div className="stat-card"><div className="stat-label">Revenue</div><div className="stat-value">₹{Number(summary.totalRevenue).toFixed(2)}</div></div>
-          <div className="stat-card"><div className="stat-label">Cost</div><div className="stat-value">₹{Number(summary.totalCost).toFixed(2)}</div></div>
-          <div className="stat-card highlight"><div className="stat-label">Profit</div><div className="stat-value">₹{Number(summary.totalProfit).toFixed(2)}</div></div>
+          <div className="stat-card"><div className="stat-label">Revenue</div><div className="stat-value">{money(summary.totalRevenue)}</div></div>
+          <div className="stat-card"><div className="stat-label">Cost</div><div className="stat-value">{money(summary.totalCost)}</div></div>
+          <div className="stat-card highlight"><div className="stat-label">Profit</div><div className="stat-value">{money(summary.totalProfit)}</div></div>
         </div>
       )}
 
@@ -65,8 +66,8 @@ export default function SalesHistory() {
                 <td>{new Date(s.createdAt).toLocaleString()}</td>
                 <td>{s.user?.name}</td>
                 <td>{s.items.map(i => `${i.productName} ×${i.quantity}`).join(', ')}</td>
-                <td>₹{Number(s.totalAmount).toFixed(2)}</td>
-                <td>₹{Number(s.totalProfit).toFixed(2)}</td>
+                <td>{money(s.totalAmount)}</td>
+                <td>{money(s.totalProfit)}</td>
               </tr>
             ))}
             {sales.length === 0 && <tr><td colSpan={5}>No sales in this range.</td></tr>}

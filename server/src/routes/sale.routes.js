@@ -14,6 +14,7 @@ const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
 const round3 = n => Math.round((n + Number.EPSILON) * 1000) / 1000;
 
 const checkoutSchema = z.object({
+  saleType: z.enum(["RETAIL", "TRADE"]).default("RETAIL"),
   items: z
     .array(
       z.object({
@@ -31,7 +32,7 @@ router.post("/", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });
   }
-  const { items } = parsed.data;
+  const { items, saleType } = parsed.data;
   const businessId = req.user.businessId;
 
   try {
@@ -65,7 +66,10 @@ router.post("/", async (req, res) => {
           throw new Error(`INSUFFICIENT_STOCK:${product.name}`);
         }
 
-        const unitPrice = product.pricePerUnit;
+        // Price is always resolved from the product record server-side,
+        // never trusted from the client — a client could otherwise send an
+        // arbitrary discounted price.
+        const unitPrice = saleType === "TRADE" ? product.tradePricePerUnit : product.pricePerUnit;
         const unitCost = product.costPerUnit;
         const lineTotal = round2(unitPrice * quantity);
         const lineCost = round2(unitCost * quantity);
@@ -79,8 +83,11 @@ router.post("/", async (req, res) => {
           productId: product.id,
           productName: product.name,
           unit: product.unit,
+          priceType: saleType,
           quantity,
           unitPrice,
+          retailUnitPrice: product.pricePerUnit,
+          tradeUnitPrice: product.tradePricePerUnit,
           unitCost,
           lineTotal,
           lineProfit
@@ -91,6 +98,7 @@ router.post("/", async (req, res) => {
         data: {
           businessId,
           userId: req.user.id,
+          saleType,
           totalAmount,
           totalCost,
           totalProfit,

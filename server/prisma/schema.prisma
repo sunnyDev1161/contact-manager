@@ -48,6 +48,11 @@ model User {
 // type). All arithmetic on them is rounded to fixed precision in
 // sale.routes.js (2dp for money, 3dp for quantity) to keep floating-point
 // drift out of totals — fine at grocery-shop scale, not bank-grade.
+// pricePerUnit = Retail Price (charged to walk-in customers).
+// tradePricePerUnit = Trade Price (discounted price for shopkeeper/bulk
+// buyers who resell it). costPerUnit = what the business paid its own
+// supplier, used for profit calculation regardless of which price a sale
+// was charged at.
 model Product {
   id                String   @id @default(uuid())
   businessId        String
@@ -57,6 +62,7 @@ model Product {
   sku               String?
   unit              String   @default("PCS")
   pricePerUnit      Float
+  tradePricePerUnit Float
   costPerUnit       Float
   stockQty          Float
   lowStockThreshold Float    @default(0)
@@ -76,6 +82,7 @@ model Sale {
   business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   userId      String
   user        User     @relation(fields: [userId], references: [id])
+  saleType    String   @default("RETAIL") // "RETAIL" | "TRADE" — which price basis this whole sale was charged at
   totalAmount Float
   totalCost   Float
   totalProfit Float
@@ -95,8 +102,11 @@ model SaleItem {
   product     Product @relation(fields: [productId], references: [id])
   productName String
   unit        String
+  priceType   String  @default("RETAIL") // "RETAIL" | "TRADE" — which price this line was charged at
   quantity    Float
-  unitPrice   Float
+  unitPrice   Float // the price actually charged (equals retailUnitPrice or tradeUnitPrice per priceType) — authoritative for totals/profit
+  retailUnitPrice Float // snapshot of both prices at sale time, so a printed bill stays historically accurate even if prices change later
+  tradeUnitPrice  Float
   unitCost    Float
   lineTotal   Float
   lineProfit  Float

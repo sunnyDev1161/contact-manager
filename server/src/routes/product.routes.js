@@ -15,6 +15,7 @@ const productSchema = z.object({
   sku: z.string().max(80).optional().nullable(),
   unit: z.enum(UNITS),
   pricePerUnit: z.number().nonnegative(),
+  tradePricePerUnit: z.number().nonnegative(),
   costPerUnit: z.number().nonnegative(),
   stockQty: z.number().nonnegative(),
   lowStockThreshold: z.number().nonnegative().optional(),
@@ -59,6 +60,7 @@ router.post("/", requireRole("OWNER"), async (req, res) => {
         sku: data.sku || null,
         unit: data.unit,
         pricePerUnit: data.pricePerUnit,
+        tradePricePerUnit: data.tradePricePerUnit,
         costPerUnit: data.costPerUnit,
         stockQty: data.stockQty,
         lowStockThreshold: data.lowStockThreshold ?? 0
@@ -94,6 +96,7 @@ router.put("/:id", requireRole("OWNER"), async (req, res) => {
         ...(data.sku !== undefined && { sku: data.sku || null }),
         ...(data.unit !== undefined && { unit: data.unit }),
         ...(data.pricePerUnit !== undefined && { pricePerUnit: data.pricePerUnit }),
+        ...(data.tradePricePerUnit !== undefined && { tradePricePerUnit: data.tradePricePerUnit }),
         ...(data.costPerUnit !== undefined && { costPerUnit: data.costPerUnit }),
         ...(data.stockQty !== undefined && { stockQty: data.stockQty }),
         ...(data.lowStockThreshold !== undefined && { lowStockThreshold: data.lowStockThreshold }),

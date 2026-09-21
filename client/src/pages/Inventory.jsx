@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import api from '../api'
+import { money } from '../format'
 
 const UNITS = ['PCS', 'KG', 'G', 'LITRE', 'ML']
 
@@ -9,6 +10,7 @@ const emptyForm = {
   sku: '',
   unit: 'PCS',
   pricePerUnit: '',
+  tradePricePerUnit: '',
   costPerUnit: '',
   stockQty: '',
   lowStockThreshold: '0'
@@ -44,6 +46,7 @@ export default function Inventory() {
       sku: p.sku || '',
       unit: p.unit,
       pricePerUnit: p.pricePerUnit,
+      tradePricePerUnit: p.tradePricePerUnit,
       costPerUnit: p.costPerUnit,
       stockQty: p.stockQty,
       lowStockThreshold: p.lowStockThreshold
@@ -64,6 +67,7 @@ export default function Inventory() {
       sku: form.sku || null,
       unit: form.unit,
       pricePerUnit: Number(form.pricePerUnit),
+      tradePricePerUnit: Number(form.tradePricePerUnit),
       costPerUnit: Number(form.costPerUnit),
       stockQty: Number(form.stockQty),
       lowStockThreshold: Number(form.lowStockThreshold || 0)
@@ -122,8 +126,12 @@ export default function Inventory() {
           </select>
         </label>
         <label>
-          Selling price / unit
+          Retail price / unit
           <input type="number" step="0.01" min="0" value={form.pricePerUnit} onChange={e => setForm({ ...form, pricePerUnit: e.target.value })} required />
+        </label>
+        <label>
+          Trade price / unit
+          <input type="number" step="0.01" min="0" value={form.tradePricePerUnit} onChange={e => setForm({ ...form, tradePricePerUnit: e.target.value })} required />
         </label>
         <label>
           Cost / unit
@@ -155,7 +163,7 @@ export default function Inventory() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Name</th><th>Category</th><th>Unit</th><th>Price</th><th>Cost</th><th>Stock</th><th></th>
+              <th>Name</th><th>Category</th><th>Unit</th><th>Retail</th><th>Trade</th><th>Cost</th><th>Stock</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -164,8 +172,9 @@ export default function Inventory() {
                 <td>{p.name}{!p.isActive && ' (removed)'}</td>
                 <td>{p.category || '—'}</td>
                 <td>{p.unit}</td>
-                <td>{p.pricePerUnit}</td>
-                <td>{p.costPerUnit}</td>
+                <td>{money(p.pricePerUnit)}</td>
+                <td>{money(p.tradePricePerUnit)}</td>
+                <td>{money(p.costPerUnit)}</td>
                 <td>{p.stockQty}</td>
                 <td className="row-actions">
                   {p.isActive ? (
