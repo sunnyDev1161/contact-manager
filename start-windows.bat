@@ -20,30 +20,20 @@ if not exist "server\.env" (
   )
 )
 
+echo Checking for updates...
+
 pushd server
-if not exist "node_modules" (
-  echo Installing backend, this only happens once...
-  call npm install || goto :error
-)
+call npm install || goto :error
 call npx prisma migrate deploy || goto :error
 popd
 
 pushd client
-if not exist "node_modules" (
-  echo Installing frontend, this only happens once...
-  call npm install || goto :error
-)
-if not exist "dist" (
-  echo Building the app, this only happens once...
-  call npm run build || goto :error
-)
+call npm install || goto :error
+call npm run build || goto :error
 popd
 
 pushd desktop
-if not exist "node_modules" (
-  echo Installing the app shell, this only happens once ^(downloads ~150MB, needs internet^)...
-  call npm install || goto :error
-)
+call npm install || goto :error
 popd
 
 echo Starting your POS...

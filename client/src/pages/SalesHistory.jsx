@@ -6,6 +6,10 @@ function toDateInput(d) {
   return d.toISOString().slice(0, 10)
 }
 
+function lastDayOfMonth(year, month) {
+  return new Date(year, month + 1, 0)
+}
+
 export default function SalesHistory() {
   const today = new Date()
   const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
@@ -17,11 +21,13 @@ export default function SalesHistory() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  async function load() {
+  async function load(range) {
+    const f = range?.from ?? from
+    const t = range?.to ?? to
     setLoading(true)
     setError('')
     try {
-      const params = { from: `${from}T00:00:00.000Z`, to: `${to}T23:59:59.999Z` }
+      const params = { from: `${f}T00:00:00.000Z`, to: `${t}T23:59:59.999Z` }
       const [salesRes, summaryRes] = await Promise.all([
         api.get('/sales', { params }),
         api.get('/sales/summary', { params })
@@ -37,15 +43,41 @@ export default function SalesHistory() {
 
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  function applyPreset(preset) {
+    const now = new Date()
+    let start, end
+    if (preset === 'thisMonth') {
+      start = new Date(now.getFullYear(), now.getMonth(), 1)
+      end = now
+    } else if (preset === 'lastMonth') {
+      start = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      end = lastDayOfMonth(now.getFullYear(), now.getMonth() - 1)
+    } else {
+      start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      end = now
+    }
+    const fromStr = toDateInput(start)
+    const toStr = toDateInput(end)
+    setFrom(fromStr)
+    setTo(toStr)
+    load({ from: fromStr, to: toStr })
+  }
+
   return (
     <div>
       <h1>Sales & Profit</h1>
       {error && <div className="error-banner">{error}</div>}
 
+      <div className="preset-row">
+        <button className="preset-btn" onClick={() => applyPreset('thisMonth')}>This Month</button>
+        <button className="preset-btn" onClick={() => applyPreset('lastMonth')}>Last Month</button>
+        <button className="preset-btn" onClick={() => applyPreset('last30')}>Last 30 Days</button>
+      </div>
+
       <div className="filter-bar">
         <label>From <input type="date" value={from} onChange={e => setFrom(e.target.value)} /></label>
         <label>To <input type="date" value={to} onChange={e => setTo(e.target.value)} /></label>
-        <button onClick={load}>Apply</button>
+        <button onClick={() => load()}>Apply</button>
       </div>
 
       {summary && (

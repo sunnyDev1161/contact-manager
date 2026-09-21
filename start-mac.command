@@ -22,30 +22,20 @@ PORT=4000
 EOF
 fi
 
+echo "Checking for updates..."
+
 cd server || fail "Could not find the server folder."
-if [ ! -d "node_modules" ]; then
-  echo "Installing backend, this only happens once..."
-  npm install || fail "Backend install failed, see the error above."
-fi
+npm install || fail "Backend install failed, see the error above."
 npx prisma migrate deploy || fail "Database setup failed, see the error above."
 cd ..
 
 cd client || fail "Could not find the client folder."
-if [ ! -d "node_modules" ]; then
-  echo "Installing frontend, this only happens once..."
-  npm install || fail "Frontend install failed, see the error above."
-fi
-if [ ! -d "dist" ]; then
-  echo "Building the app, this only happens once..."
-  npm run build || fail "Build failed, see the error above."
-fi
+npm install || fail "Frontend install failed, see the error above."
+npm run build || fail "Build failed, see the error above."
 cd ..
 
 cd desktop || fail "Could not find the desktop folder."
-if [ ! -d "node_modules" ]; then
-  echo "Installing the app shell, this only happens once (downloads ~150MB, needs internet)..."
-  npm install || fail "Desktop app install failed, see the error above."
-fi
+npm install || fail "Desktop app install failed, see the error above."
 cd ..
 
 echo "Starting your POS..."

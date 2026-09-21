@@ -145,6 +145,10 @@ export default function Inventory() {
           Low stock alert below
           <input type="number" step="0.001" min="0" value={form.lowStockThreshold} onChange={e => setForm({ ...form, lowStockThreshold: e.target.value })} />
         </label>
+        <div className="profit-preview">
+          <span>Retail profit/unit: <strong>{money((Number(form.pricePerUnit) || 0) - (Number(form.costPerUnit) || 0))}</strong></span>
+          <span>Trade profit/unit: <strong>{money((Number(form.tradePricePerUnit) || 0) - (Number(form.costPerUnit) || 0))}</strong></span>
+        </div>
         <div className="form-actions">
           <button type="submit">{editingId ? 'Save changes' : 'Add product'}</button>
           {editingId && <button type="button" className="secondary" onClick={cancelEdit}>Cancel</button>}
@@ -163,7 +167,7 @@ export default function Inventory() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Name</th><th>Category</th><th>Unit</th><th>Retail</th><th>Trade</th><th>Cost</th><th>Stock</th><th></th>
+              <th>Name</th><th>Category</th><th>Unit</th><th>Retail</th><th>Trade</th><th>Cost</th><th>Profit</th><th>Stock</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -175,6 +179,7 @@ export default function Inventory() {
                 <td>{money(p.pricePerUnit)}</td>
                 <td>{money(p.tradePricePerUnit)}</td>
                 <td>{money(p.costPerUnit)}</td>
+                <td>{money(p.pricePerUnit - p.costPerUnit)}</td>
                 <td>{p.stockQty}</td>
                 <td className="row-actions">
                   {p.isActive ? (

@@ -8,6 +8,13 @@ const SERVER_DIR = path.join(__dirname, "..", "server");
 const HEALTH_URL = `http://localhost:${PORT}/api/health`;
 const APP_URL = `http://localhost:${PORT}`;
 
+// This app has its own login/auth system — Chromium's built-in Autofill
+// component (form-field and password suggestions) has no useful role here,
+// and its popup is a separate native surface layered on top of the page
+// (not part of the page's own DOM), which can sit over nearby controls
+// like a form's submit button after a password field is focused.
+app.commandLine.appendSwitch("disable-features", "Autofill");
+
 let serverProcess = null;
 let mainWindow = null;
 
