@@ -8,6 +8,7 @@ import POS from './pages/POS'
 import Inventory from './pages/Inventory'
 import SalesHistory from './pages/SalesHistory'
 import Staff from './pages/Staff'
+import Settings from './pages/Settings'
 
 export default function App() {
   return (
@@ -37,6 +38,14 @@ export default function App() {
             element={
               <ProtectedRoute ownerOnly>
                 <Staff />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute ownerOnly>
+                <Settings />
               </ProtectedRoute>
             }
           />

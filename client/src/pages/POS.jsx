@@ -44,6 +44,7 @@ export default function POS() {
   const [message, setMessage] = useState('')
   const [checkingOut, setCheckingOut] = useState(false)
   const [lastSale, setLastSale] = useState(null)
+  const [business, setBusiness] = useState(null)
   const codeInputRef = useRef(null)
 
   async function loadProducts() {
@@ -52,6 +53,9 @@ export default function POS() {
   }
 
   useEffect(() => { loadProducts() }, [])
+  useEffect(() => {
+    api.get('/business').then(({ data }) => setBusiness(data.business)).catch(() => {})
+  }, [])
   useEffect(() => {
     if (user?.businessId) setHeldBills(loadHeld(user.businessId))
   }, [user?.businessId])
@@ -367,7 +371,7 @@ export default function POS() {
         </div>
       )}
 
-      <PrintableBill sale={lastSale} businessName={user?.businessName} cashierName={user?.name} />
+      <PrintableBill sale={lastSale} business={business} cashierName={user?.name} />
     </div>
   )
 }

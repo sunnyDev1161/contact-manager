@@ -20,9 +20,13 @@ datasource db {
 // A Business is a tenant. Every table below is scoped to one, so the schema
 // is already tenant-safe even though the app is currently run for one shop.
 model Business {
-  id        String    @id @default(uuid())
-  name      String
-  createdAt DateTime  @default(now())
+  id          String   @id @default(uuid())
+  name        String
+  tagline     String? // e.g. "TRADING • SUPPLY • GENERAL MERCHANDISE" — shown on the printed bill
+  proprietors String? // e.g. "Full Name | Full Name"
+  address     String?
+  phone       String? // free text — shop may list more than one number
+  createdAt   DateTime @default(now())
 
   users    User[]
   products Product[]

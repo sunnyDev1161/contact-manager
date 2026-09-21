@@ -13,6 +13,7 @@ export default function Layout() {
           <NavLink to="/sales">Sales</NavLink>
           {user?.role === 'OWNER' && <NavLink to="/inventory">Inventory</NavLink>}
           {user?.role === 'OWNER' && <NavLink to="/staff">Staff</NavLink>}
+          {user?.role === 'OWNER' && <NavLink to="/settings">Settings</NavLink>}
         </nav>
         <div className="user-box">
           <span>{user?.name} ({user?.role})</span>
