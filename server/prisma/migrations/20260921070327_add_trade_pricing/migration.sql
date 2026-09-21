@@ -24,7 +24,12 @@ CREATE TABLE "new_Product" (
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "Product_businessId_fkey" FOREIGN KEY ("businessId") REFERENCES "Business" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
-INSERT INTO "new_Product" ("businessId", "category", "costPerUnit", "createdAt", "id", "isActive", "lowStockThreshold", "name", "pricePerUnit", "sku", "stockQty", "unit", "updatedAt") SELECT "businessId", "category", "costPerUnit", "createdAt", "id", "isActive", "lowStockThreshold", "name", "pricePerUnit", "sku", "stockQty", "unit", "updatedAt" FROM "Product";
+-- Existing products had no trade price before this migration. Backfilling
+-- tradePricePerUnit = pricePerUnit means "no wholesale discount configured
+-- yet" for them, rather than crashing the migration or defaulting to 0
+-- (which would print as a nonsensical Rs. 0.00 trade price on real
+-- products). The owner can set a real discount per product afterward.
+INSERT INTO "new_Product" ("businessId", "category", "costPerUnit", "createdAt", "id", "isActive", "lowStockThreshold", "name", "pricePerUnit", "tradePricePerUnit", "sku", "stockQty", "unit", "updatedAt") SELECT "businessId", "category", "costPerUnit", "createdAt", "id", "isActive", "lowStockThreshold", "name", "pricePerUnit", "pricePerUnit", "sku", "stockQty", "unit", "updatedAt" FROM "Product";
 DROP TABLE "Product";
 ALTER TABLE "new_Product" RENAME TO "Product";
 CREATE INDEX "Product_businessId_idx" ON "Product"("businessId");

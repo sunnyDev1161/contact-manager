@@ -25,7 +25,12 @@ CREATE TABLE "new_SaleItem" (
     CONSTRAINT "SaleItem_saleId_fkey" FOREIGN KEY ("saleId") REFERENCES "Sale" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "SaleItem_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
-INSERT INTO "new_SaleItem" ("id", "lineProfit", "lineTotal", "priceType", "productId", "productName", "quantity", "saleId", "unit", "unitCost", "unitPrice") SELECT "id", "lineProfit", "lineTotal", "priceType", "productId", "productName", "quantity", "saleId", "unit", "unitCost", "unitPrice" FROM "SaleItem";
+-- Sales made before this migration only ever charged pricePerUnit (retail)
+-- — trade pricing didn't exist yet. Backfilling both new columns from the
+-- historic unitPrice keeps old receipts reprintable and correct, instead of
+-- crashing the migration or inventing a fake trade price for a sale that
+-- was never charged one.
+INSERT INTO "new_SaleItem" ("id", "lineProfit", "lineTotal", "priceType", "productId", "productName", "quantity", "saleId", "unit", "unitCost", "unitPrice", "retailUnitPrice", "tradeUnitPrice") SELECT "id", "lineProfit", "lineTotal", "priceType", "productId", "productName", "quantity", "saleId", "unit", "unitCost", "unitPrice", "unitPrice", "unitPrice" FROM "SaleItem";
 DROP TABLE "SaleItem";
 ALTER TABLE "new_SaleItem" RENAME TO "SaleItem";
 CREATE INDEX "SaleItem_saleId_idx" ON "SaleItem"("saleId");
