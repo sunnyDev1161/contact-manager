@@ -1,0 +1,37 @@
+databases:
+  - name: pos-db
+    plan: free
+    databaseName: posdb
+    user: posuser
+
+services:
+  - type: web
+    name: pos-server
+    env: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pos-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_VERSION
+        value: 20
+
+  - type: web
+    name: pos-client
+    env: static
+    rootDir: client
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        value: ""
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
