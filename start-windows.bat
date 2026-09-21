@@ -39,16 +39,17 @@ if not exist "dist" (
 )
 popd
 
-echo Starting your POS...
-start "POS Server" /min cmd /c "cd server && npm start"
-timeout /t 2 /nobreak >nul
-start "" http://localhost:4000
+pushd desktop
+if not exist "node_modules" (
+  echo Installing the app shell, this only happens once ^(downloads ~150MB, needs internet^)...
+  call npm install || goto :error
+)
+popd
 
-echo.
-echo Your POS is running at http://localhost:4000
-echo A "POS Server" window is running in the background - closing THAT window stops the app.
-echo You can close this window now.
-pause
+echo Starting your POS...
+cd desktop
+call npm start
+cd ..
 exit /b 0
 
 :error

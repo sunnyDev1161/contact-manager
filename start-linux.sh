@@ -40,16 +40,14 @@ if [ ! -d "dist" ]; then
 fi
 cd ..
 
-echo "Starting your POS..."
-cd server
-npm start &
-SERVER_PID=$!
+cd desktop || fail "Could not find the desktop folder."
+if [ ! -d "node_modules" ]; then
+  echo "Installing the app shell, this only happens once (downloads ~150MB, needs internet)..."
+  npm install || fail "Desktop app install failed, see the error above."
+fi
 cd ..
 
-sleep 2
-xdg-open http://localhost:4000 2>/dev/null || echo "Open http://localhost:4000 in your browser."
-
-echo ""
-echo "Your POS is running at http://localhost:4000"
-echo "Press Ctrl+C to stop it."
-wait "$SERVER_PID"
+echo "Starting your POS..."
+cd desktop
+npm start
+cd ..

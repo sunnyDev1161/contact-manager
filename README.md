@@ -3,10 +3,14 @@
 A point-of-sale system for a grocery shop: authenticated inventory management
 and sales tracking, with per-sale profit computed automatically.
 
-Runs entirely on your own laptop by default — no internet connection needed
-after the one-time setup, no hosting account, no monthly bill. It can also be
-deployed to the web later (see **Hosting it instead**) if you decide you need
-that.
+Runs as a real desktop app on your own laptop — its own window, no browser
+tab, no address bar. No internet connection needed after the one-time setup,
+no hosting account, no monthly bill. It can also be deployed to the web later
+(see **Hosting it instead**) if you decide you need that.
+
+Login is required either way — there's no "desktop mode" that skips auth.
+Wrapping the app in a native window doesn't change that; it's the same
+login screen either way, just without browser chrome around it.
 
 Every table is scoped to a `businessId` from day one, so the same codebase
 can later host more than one shop (a reseller/multi-tenant model) without a
@@ -17,6 +21,8 @@ via the **Register** page and runs independently.
 
 - **Backend**: Node.js, Express, SQLite (via Prisma ORM), JWT auth (bcrypt password hashing)
 - **Frontend**: React (Vite), React Router, Axios — built and served by the backend as one app
+- **Desktop shell**: Electron — opens the app in its own native window and
+  manages starting/stopping the backend for you
 
 ## Features
 
@@ -37,6 +43,7 @@ via the **Register** page and runs independently.
 ```
 server/            Express API + Prisma schema/migrations + serves the built frontend
 client/            React (Vite) frontend
+desktop/           Electron shell — native window + starts/stops the backend
 start-windows.bat  Double-click to run on Windows
 start-mac.command  Double-click to run on macOS
 start-linux.sh     Run on Linux
@@ -54,15 +61,30 @@ in a single SQLite file next to the code.
    - **Mac**: `start-mac.command` (first time, right-click → Open, since it's
      an unsigned script — macOS will ask you to confirm once)
    - **Linux**: run `./start-linux.sh` in a terminal
-3. First run takes a minute or two (installs dependencies, builds the app).
-   Every run after that starts in a couple of seconds.
-4. Your browser opens to `http://localhost:4000` automatically. Register your
+3. First run takes a few minutes (installs dependencies, builds the app,
+   downloads the ~150MB Electron runtime — needs internet for this step
+   only). Every run after that opens in a couple of seconds, no internet
+   required.
+4. A native app window opens — no browser, no address bar. Register your
    real business there.
 
-To stop it: close the terminal/server window the script opened.
+To stop it: close the app window (this also stops the background server —
+you don't need to close anything else separately).
 
 To use it again later, just run the same script — your data is already
 there, in `server/dev.db`.
+
+**No packaged installer (.exe/.dmg) is provided.** I can't build and verify
+one from here — a Windows installer needs to actually run on Windows to
+confirm it works, and this environment has neither a Windows nor a Mac
+machine to test on. Shipping an installer I haven't verified would be worse
+than not having one. What you have instead is source code plus a script that
+installs Electron directly on your machine and runs it — I tested that exact
+path end-to-end (fresh install through to a working native window with a
+real login and checkout) before handing it to you. If a proper installer
+matters to you later (e.g. handing this to staff who shouldn't see any of
+this folder structure), that's a `electron-builder` packaging step — ask
+when you're ready and we can look at what's needed for your OS specifically.
 
 **Backing up your data** is copying one file: `server/dev.db`. Do this
 regularly (copy it to a USB drive, cloud folder, email it to yourself —
@@ -90,8 +112,17 @@ npm install
 npm run build
 ```
 
-Then open `http://localhost:4000`. Seeded login (if you ran `npm run seed`):
-`owner@example.com` / `changeme123`.
+Then open `http://localhost:4000` in a browser — or, for the native window
+instead of a browser tab, run the desktop shell separately (it starts the
+server itself, so skip `npm start` above if you're using this):
+
+```bash
+cd desktop
+npm install
+npm start
+```
+
+Seeded login (if you ran `npm run seed`): `owner@example.com` / `changeme123`.
 
 For frontend development with hot-reload instead of a static build:
 `cd client && npm run dev` (starts on :5173, proxies `/api` to :4000 — run
