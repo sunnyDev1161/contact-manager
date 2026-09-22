@@ -1,8 +1,18 @@
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import api from '../api'
 
 export default function Layout() {
   const { user, logout } = useAuth()
+  const [lowStockCount, setLowStockCount] = useState(0)
+
+  useEffect(() => {
+    api.get('/products').then(({ data }) => {
+      const count = data.products.filter(p => Number(p.stockQty) <= Number(p.lowStockThreshold)).length
+      setLowStockCount(count)
+    }).catch(() => {})
+  }, [])
 
   return (
     <div className="app-shell">
@@ -12,7 +22,12 @@ export default function Layout() {
           <NavLink to="/pos">POS</NavLink>
           <NavLink to="/sales">Sales</NavLink>
           <NavLink to="/customers">Customers</NavLink>
-          {user?.role === 'OWNER' && <NavLink to="/inventory">Inventory</NavLink>}
+          {user?.role === 'OWNER' && (
+            <NavLink to="/inventory">
+              Inventory
+              {lowStockCount > 0 && <span className="low-stock-badge" title={`${lowStockCount} item(s) low on stock`}>{lowStockCount}</span>}
+            </NavLink>
+          )}
           {user?.role === 'OWNER' && <NavLink to="/staff">Staff</NavLink>}
           {user?.role === 'OWNER' && <NavLink to="/settings">Settings</NavLink>}
         </nav>

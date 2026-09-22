@@ -8,6 +8,28 @@ export default function Settings() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [backingUp, setBackingUp] = useState(false)
+
+  async function downloadBackup() {
+    setError('')
+    setBackingUp(true)
+    try {
+      const { data } = await api.get('/business/backup')
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `backup-${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Backup failed')
+    } finally {
+      setBackingUp(false)
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -88,6 +110,14 @@ export default function Settings() {
           <button type="submit">Save</button>
         </div>
       </form>
+
+      <div className="card">
+        <h2>Data backup</h2>
+        <p>Download a full copy of your products, customers, sales, and credit ledger as a JSON file. Keep it somewhere other than this laptop — a USB drive, email to yourself, or cloud storage — in case anything happens to this machine.</p>
+        <button type="button" onClick={downloadBackup} disabled={backingUp}>
+          {backingUp ? 'Preparing…' : 'Download backup'}
+        </button>
+      </div>
     </div>
   )
 }

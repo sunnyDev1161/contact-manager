@@ -1,7 +1,17 @@
 import { useEffect, useState } from 'react'
 import api from '../api'
 import { useAuth } from '../context/AuthContext'
-import { money } from '../format'
+import { money, downloadCsv } from '../format'
+
+function ledgerTagLabel(type) {
+  if (type === 'SALE') return 'Credit (sale)'
+  if (type === 'VOID') return 'Reversal (voided sale)'
+  return 'Payment'
+}
+
+function ledgerTagClass(type) {
+  return type === 'SALE' ? 'ledger-tag credit' : type === 'VOID' ? 'ledger-tag void' : 'ledger-tag payment'
+}
 
 const emptyForm = { shopName: '', shopkeeperName: '', phone: '', address: '' }
 
@@ -140,10 +150,20 @@ export default function Customers() {
 
       <div className="list-header">
         <h2>All customers</h2>
-        <label className="inline-check">
-          <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} />
-          Show removed
-        </label>
+        <div className="list-header-actions">
+          <button className="secondary" onClick={() => downloadCsv('customers.csv', [
+            ['Shop', c => c.shopName],
+            ['Shopkeeper', c => c.shopkeeperName],
+            ['Phone', c => c.phone],
+            ['Address', c => c.address],
+            ['Balance', c => c.balance],
+            ['Active', c => c.isActive ? 'Yes' : 'No']
+          ], customers)} disabled={customers.length === 0}>Export CSV</button>
+          <label className="inline-check">
+            <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} />
+            Show removed
+          </label>
+        </div>
       </div>
 
       {loading ? <p>Loading…</p> : (
@@ -205,9 +225,7 @@ export default function Customers() {
               {ledgerEntries.map(e => (
                 <div key={e.id} className="ledger-row">
                   <div>
-                    <span className={e.type === 'SALE' ? 'ledger-tag credit' : 'ledger-tag payment'}>
-                      {e.type === 'SALE' ? 'Credit (sale)' : 'Payment'}
-                    </span>
+                    <span className={ledgerTagClass(e.type)}>{ledgerTagLabel(e.type)}</span>
                     {e.note && <span className="ledger-note"> — {e.note}</span>}
                     <div className="ledger-meta">{new Date(e.createdAt).toLocaleString()} • {e.recordedBy?.name}</div>
                   </div>

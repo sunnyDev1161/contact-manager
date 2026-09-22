@@ -22,7 +22,12 @@ function formatDateTime(d) {
 export default function PrintableBill({ sale, business, cashierName }) {
   if (!sale || !business) return null
 
-  const billNo = sale.id.slice(-8).toUpperCase()
+  // sale.invoiceNo is the real, sequential business invoice number. A sale
+  // loaded fresh from checkout (POS) doesn't carry sale.user, so the
+  // logged-in cashier's name is passed in separately; a sale reprinted from
+  // history already has sale.user (whoever actually rang it up).
+  const billNo = `INV-${String(sale.invoiceNo).padStart(5, '0')}`
+  const cashier = sale.user?.name || cashierName
 
   return (
     <div className="receipt-print">
@@ -58,7 +63,7 @@ export default function PrintableBill({ sale, business, cashierName }) {
       <div className="bill-meta-row">
         <div>
           <div><strong>REF:</strong> {billNo}</div>
-          <div><strong>Cashier:</strong> {cashierName}</div>
+          <div><strong>Cashier:</strong> {cashier}</div>
           <div><strong>Sold To:</strong> {sale.customer ? sale.customer.shopName : 'Walk-in'}</div>
         </div>
         <div className="bill-meta-right">

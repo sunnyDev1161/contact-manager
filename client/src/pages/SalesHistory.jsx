@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import api from '../api'
-import { money } from '../format'
+import { useAuth } from '../context/AuthContext'
+import PrintableBill from '../components/PrintableBill'
+import { money, downloadCsv } from '../format'
 
 function toDateInput(d) {
   return d.toISOString().slice(0, 10)
@@ -11,15 +13,20 @@ function lastDayOfMonth(year, month) {
 }
 
 export default function SalesHistory() {
+  const { user } = useAuth()
+  const isOwner = user?.role === 'OWNER'
   const today = new Date()
   const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
 
   const [from, setFrom] = useState(toDateInput(monthAgo))
   const [to, setTo] = useState(toDateInput(today))
   const [sales, setSales] = useState([])
+  const [totalCount, setTotalCount] = useState(0)
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [business, setBusiness] = useState(null)
+  const [printSale, setPrintSale] = useState(null)
 
   async function load(range) {
     const f = range?.from ?? from
@@ -27,12 +34,13 @@ export default function SalesHistory() {
     setLoading(true)
     setError('')
     try {
-      const params = { from: `${f}T00:00:00.000Z`, to: `${t}T23:59:59.999Z` }
+      const params = { from: `${f}T00:00:00.000Z`, to: `${t}T23:59:59.999Z`, limit: 200 }
       const [salesRes, summaryRes] = await Promise.all([
         api.get('/sales', { params }),
         api.get('/sales/summary', { params })
       ])
       setSales(salesRes.data.sales)
+      setTotalCount(salesRes.data.totalCount)
       setSummary(summaryRes.data)
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load sales')
@@ -42,6 +50,17 @@ export default function SalesHistory() {
   }
 
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    api.get('/business').then(({ data }) => setBusiness(data.business)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!printSale) return
+    // Let the hidden .receipt-print element render with the new sale before
+    // the browser's print dialog captures the page.
+    const t = setTimeout(() => window.print(), 50)
+    return () => clearTimeout(t)
+  }, [printSale])
 
   function applyPreset(preset) {
     const now = new Date()
@@ -63,6 +82,33 @@ export default function SalesHistory() {
     load({ from: fromStr, to: toStr })
   }
 
+  async function voidSale(sale) {
+    const reason = prompt(`Void sale INV-${String(sale.invoiceNo).padStart(5, '0')}? This restocks the items and reverses any credit. Enter a reason:`)
+    if (!reason) return
+    setError('')
+    try {
+      await api.post(`/sales/${sale.id}/void`, { reason })
+      load()
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to void sale')
+    }
+  }
+
+  function exportCsv() {
+    downloadCsv(`sales_${from}_to_${to}.csv`, [
+      ['Invoice #', s => `INV-${String(s.invoiceNo).padStart(5, '0')}`],
+      ['Date', s => new Date(s.createdAt).toLocaleString()],
+      ['Customer', s => s.customer ? s.customer.shopName : 'Walk-in'],
+      ['Cashier', s => s.user?.name || ''],
+      ['Items', s => s.items.map(i => `${i.productName} x${i.quantity}`).join('; ')],
+      ['Total', s => s.totalAmount],
+      ['Paid', s => s.amountPaid],
+      ['Credit', s => Math.max(0, s.totalAmount - s.amountPaid)],
+      ['Profit', s => s.totalProfit],
+      ['Voided', s => s.voidedAt ? 'Yes' : 'No']
+    ], sales)
+  }
+
   return (
     <div>
       <h1>Sales & Profit</h1>
@@ -78,6 +124,7 @@ export default function SalesHistory() {
         <label>From <input type="date" value={from} onChange={e => setFrom(e.target.value)} /></label>
         <label>To <input type="date" value={to} onChange={e => setTo(e.target.value)} /></label>
         <button onClick={() => load()}>Apply</button>
+        <button className="secondary" onClick={exportCsv} disabled={sales.length === 0}>Export CSV</button>
       </div>
 
       {summary && (
@@ -90,26 +137,38 @@ export default function SalesHistory() {
       )}
 
       {loading ? <p>Loading…</p> : (
-        <table className="data-table">
-          <thead><tr><th>Date</th><th>Customer</th><th>Cashier</th><th>Items</th><th>Total</th><th>Paid</th><th>Profit</th></tr></thead>
-          <tbody>
-            {sales.map(s => (
-              <tr key={s.id}>
-                <td>{new Date(s.createdAt).toLocaleString()}</td>
-                <td>{s.customer ? s.customer.shopName : 'Walk-in'}</td>
-                <td>{s.user?.name}</td>
-                <td>{s.items.map(i => `${i.productName} ×${i.quantity}`).join(', ')}</td>
-                <td>{money(s.totalAmount)}</td>
-                <td className={s.totalAmount - s.amountPaid > 0.001 ? 'balance-owed' : ''}>
-                  {money(s.amountPaid)}{s.totalAmount - s.amountPaid > 0.001 && ` (${money(s.totalAmount - s.amountPaid)} credit)`}
-                </td>
-                <td>{money(s.totalProfit)}</td>
-              </tr>
-            ))}
-            {sales.length === 0 && <tr><td colSpan={7}>No sales in this range.</td></tr>}
-          </tbody>
-        </table>
+        <>
+          {totalCount > sales.length && (
+            <p className="truncation-note">Showing the most recent {sales.length} of {totalCount} sales in this range. Narrow the date range to see the rest.</p>
+          )}
+          <table className="data-table">
+            <thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Cashier</th><th>Items</th><th>Total</th><th>Paid</th><th>Profit</th><th></th></tr></thead>
+            <tbody>
+              {sales.map(s => (
+                <tr key={s.id} className={s.voidedAt ? 'voided-row' : ''}>
+                  <td>INV-{String(s.invoiceNo).padStart(5, '0')}{s.voidedAt && <span className="void-badge"> VOIDED</span>}</td>
+                  <td>{new Date(s.createdAt).toLocaleString()}</td>
+                  <td>{s.customer ? s.customer.shopName : 'Walk-in'}</td>
+                  <td>{s.user?.name}</td>
+                  <td>{s.items.map(i => `${i.productName} ×${i.quantity}`).join(', ')}</td>
+                  <td>{money(s.totalAmount)}</td>
+                  <td className={s.totalAmount - s.amountPaid > 0.001 ? 'balance-owed' : ''}>
+                    {money(s.amountPaid)}{s.totalAmount - s.amountPaid > 0.001 && ` (${money(s.totalAmount - s.amountPaid)} credit)`}
+                  </td>
+                  <td>{money(s.totalProfit)}</td>
+                  <td className="row-actions">
+                    <button className="link" onClick={() => setPrintSale(s)}>Print</button>
+                    {isOwner && !s.voidedAt && <button className="link danger" onClick={() => voidSale(s)}>Void</button>}
+                  </td>
+                </tr>
+              ))}
+              {sales.length === 0 && <tr><td colSpan={9}>No sales in this range.</td></tr>}
+            </tbody>
+          </table>
+        </>
       )}
+
+      <PrintableBill sale={printSale} business={business} cashierName={printSale?.user?.name} />
     </div>
   )
 }

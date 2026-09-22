@@ -85,6 +85,10 @@ router.post("/login", async (req, res) => {
     return res.status(401).json({ error: "Invalid email or password" });
   }
 
+  if (!user.isActive) {
+    return res.status(403).json({ error: "This account has been deactivated. Contact the business owner." });
+  }
+
   const token = signToken(user);
   res.json({ token, user: sanitize(user) });
 });
@@ -137,6 +141,40 @@ router.get("/staff", requireAuth, requireRole("OWNER"), async (req, res) => {
     orderBy: { createdAt: "asc" }
   });
   res.json({ users: users.map(sanitize) });
+});
+
+const staffUpdateSchema = z.object({
+  name: z.string().min(2).max(120).optional(),
+  isActive: z.boolean().optional(),
+  password: z.string().min(8).max(200).optional()
+});
+
+// Owner edits a staff account: rename, deactivate/reactivate (revokes access
+// on their very next request via requireAuth, not just at next login), or
+// reset a forgotten password. Deliberately can't change `role` — a business
+// has exactly one OWNER, fixed at registration.
+router.put("/staff/:id", requireAuth, requireRole("OWNER"), async (req, res) => {
+  const parsed = staffUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+
+  const existing = await prisma.user.findFirst({
+    where: { id: req.params.id, businessId: req.user.businessId }
+  });
+  if (!existing) return res.status(404).json({ error: "Staff account not found" });
+  if (existing.role === "OWNER") {
+    return res.status(400).json({ error: "The owner account can't be edited here." });
+  }
+
+  const data = parsed.data;
+  const updateData = {};
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.isActive !== undefined) updateData.isActive = data.isActive;
+  if (data.password !== undefined) updateData.passwordHash = await bcrypt.hash(data.password, 10);
+
+  const user = await prisma.user.update({ where: { id: existing.id }, data: updateData });
+  res.json({ user: sanitize(user) });
 });
 
 module.exports = router;

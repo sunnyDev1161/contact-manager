@@ -26,6 +26,7 @@ model Business {
   proprietors String? // e.g. "Full Name | Full Name"
   address     String?
   phone       String? // free text — shop may list more than one number
+  nextInvoiceNo Int    @default(1) // next sequential invoice number to assign; incremented atomically per sale
   createdAt   DateTime @default(now())
 
   users         User[]
@@ -43,10 +44,12 @@ model User {
   email        String   @unique
   passwordHash String
   role         String   @default("STAFF")
+  isActive     Boolean  @default(true) // OWNER can deactivate a staff account to revoke access without losing their sales history
   createdAt    DateTime @default(now())
 
   sales         Sale[]
   ledgerEntries LedgerEntry[] // payments/credits this user recorded
+  voidedSales   Sale[]        @relation("SaleVoidedBy")
 
   @@index([businessId])
 }
@@ -82,7 +85,7 @@ model LedgerEntry {
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   customerId String
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  type       String // "SALE" (increases balance owed) | "PAYMENT" (decreases it)
+  type       String // "SALE" (increases balance owed) | "PAYMENT" or "VOID" (both decrease it — VOID is the compensating entry created when a credit sale is voided)
   amount     Float // always positive; `type` determines the sign
   saleId     String?
   sale       Sale?    @relation(fields: [saleId], references: [id])
@@ -136,10 +139,15 @@ model Sale {
   customerId  String? // set when this sale is attributed to a shopkeeper account; null for a walk-in/cash sale
   customer    Customer? @relation(fields: [customerId], references: [id])
   saleType    String    @default("RETAIL") // "RETAIL" | "TRADE" — which price basis this whole sale was charged at
+  invoiceNo   Int // sequential per business (1, 2, 3, ...) — the real bill number printed on the receipt, distinct from the internal id
   totalAmount Float
   totalCost   Float
   totalProfit Float
   amountPaid  Float     @default(0) // cash actually collected at checkout; totalAmount - amountPaid is what was put on the customer's credit (0 for a fully-paid sale)
+  voidedAt       DateTime? // set when an owner voids this sale (stock restocked, any credit reversed); the sale row itself is kept for the audit trail, never deleted
+  voidedByUserId String?
+  voidedBy       User?     @relation("SaleVoidedBy", fields: [voidedByUserId], references: [id])
+  voidReason     String?
   createdAt   DateTime  @default(now())
 
   items         SaleItem[]
@@ -148,6 +156,7 @@ model Sale {
   @@index([businessId])
   @@index([createdAt])
   @@index([customerId])
+  @@unique([businessId, invoiceNo])
 }
 
 model SaleItem {

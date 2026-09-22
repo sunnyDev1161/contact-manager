@@ -9,6 +9,10 @@ function heldKey(businessId) {
   return `pos_held_bills_${businessId}`
 }
 
+function draftKey(businessId) {
+  return `pos_draft_${businessId}`
+}
+
 function loadHeld(businessId) {
   try {
     const raw = localStorage.getItem(heldKey(businessId))
@@ -49,6 +53,7 @@ export default function POS() {
   const [customer, setCustomer] = useState(null) // selected Customer object, or null for walk-in
   const [customerQuery, setCustomerQuery] = useState('')
   const [showCustomerPicker, setShowCustomerPicker] = useState(false)
+  const [draftLoaded, setDraftLoaded] = useState(false)
   const codeInputRef = useRef(null)
 
   async function loadProducts() {
@@ -70,6 +75,42 @@ export default function POS() {
     if (user?.businessId) setHeldBills(loadHeld(user.businessId))
   }, [user?.businessId])
   useEffect(() => { codeInputRef.current?.focus() }, [])
+
+  // Restores an in-progress sale (not explicitly "held" — just whatever was
+  // on screen) if the app was closed, refreshed, or the session was force-
+  // logged-out mid-sale. Without this, a cart that isn't manually held is
+  // gone for good the moment anything interrupts the page.
+  useEffect(() => {
+    if (!user?.businessId) return
+    try {
+      const raw = localStorage.getItem(draftKey(user.businessId))
+      if (raw) {
+        const draft = JSON.parse(raw)
+        if (draft?.cart?.length) {
+          setCart(draft.cart)
+          setSaleType(draft.saleType || 'RETAIL')
+          setCustomer(draft.customer || null)
+        }
+      }
+    } catch {
+      // ignore a corrupt draft — better to start with an empty sale than crash
+    } finally {
+      setDraftLoaded(true)
+    }
+  }, [user?.businessId])
+
+  useEffect(() => {
+    if (!draftLoaded || !user?.businessId) return
+    try {
+      if (cart.length === 0) {
+        localStorage.removeItem(draftKey(user.businessId))
+      } else {
+        localStorage.setItem(draftKey(user.businessId), JSON.stringify({ cart, saleType, customer }))
+      }
+    } catch {
+      // draft autosave is a convenience, not critical data
+    }
+  }, [cart, saleType, customer, draftLoaded, user?.businessId])
 
   const categories = useMemo(() => {
     const set = new Set(products.map(p => p.category).filter(Boolean))
