@@ -58,12 +58,15 @@ export default function POS() {
 
   async function loadProducts() {
     const { data } = await api.get('/products')
-    setProducts(data.products)
+    // Defensive default: a malformed/empty response must never crash the
+    // live checkout screen with no error boundary — better to show an
+    // empty product grid than take down the cashier's ability to sell.
+    setProducts(data.products || [])
   }
 
   async function loadCustomers() {
     const { data } = await api.get('/customers')
-    setCustomers(data.customers)
+    setCustomers(data.customers || [])
   }
 
   useEffect(() => { loadProducts() }, [])
