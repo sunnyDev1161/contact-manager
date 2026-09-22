@@ -81,3 +81,72 @@ jobs:
           node-version: 22
       - name: Check main.js
         run: node --check desktop/main.js
+
+  server-test:
+    name: Backend unit/integration tests (Jest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install dependencies
+        working-directory: server
+        run: npm ci
+      - name: Run tests
+        working-directory: server
+        run: npm test
+
+  client-test:
+    name: Frontend component tests (Jest + React Testing Library)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Install dependencies
+        working-directory: client
+        run: npm ci
+      - name: Run tests
+        working-directory: client
+        run: npm test
+
+  e2e-test:
+    name: End-to-end regression tests (Playwright + Electron)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # GitHub's hosted ubuntu-latest runners already ship the shared
+      # libraries Electron/Chromium need (they're built for browser
+      # testing) — xvfb (a virtual display, needed since this runner has
+      # none) is the one thing actually missing.
+      - name: Install xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+      - name: Install and build client
+        working-directory: client
+        run: npm ci && npm run build
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm ci
+      - name: Install e2e dependencies
+        working-directory: e2e
+        # @playwright/test's postinstall normally downloads Chromium/Firefox/
+        # WebKit, but these tests drive the real Electron app, not one of
+        # those — skip the download entirely.
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: npm ci
+      - name: Run Playwright tests against the real Electron app
+        working-directory: e2e
+        run: xvfb-run -a npx playwright test

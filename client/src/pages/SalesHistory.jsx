@@ -27,6 +27,9 @@ export default function SalesHistory() {
   const [error, setError] = useState('')
   const [business, setBusiness] = useState(null)
   const [printSale, setPrintSale] = useState(null)
+  const [voidingSale, setVoidingSale] = useState(null)
+  const [voidReason, setVoidReason] = useState('')
+  const [voiding, setVoiding] = useState(false)
 
   async function load(range) {
     const f = range?.from ?? from
@@ -82,15 +85,27 @@ export default function SalesHistory() {
     load({ from: fromStr, to: toStr })
   }
 
-  async function voidSale(sale) {
-    const reason = prompt(`Void sale INV-${String(sale.invoiceNo).padStart(5, '0')}? This restocks the items and reverses any credit. Enter a reason:`)
-    if (!reason) return
+  // A modal, not window.prompt(): Electron's Chromium build doesn't
+  // implement prompt() at all (it throws "prompt() is and will not be
+  // supported"), unlike alert()/confirm() which do work there — this is a
+  // real desktop app, not a regular browser tab.
+  function startVoid(sale) {
+    setVoidingSale(sale)
+    setVoidReason('')
+  }
+
+  async function confirmVoid() {
+    if (!voidReason.trim()) return
+    setVoiding(true)
     setError('')
     try {
-      await api.post(`/sales/${sale.id}/void`, { reason })
+      await api.post(`/sales/${voidingSale.id}/void`, { reason: voidReason.trim() })
+      setVoidingSale(null)
       load()
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to void sale')
+    } finally {
+      setVoiding(false)
     }
   }
 
@@ -158,7 +173,7 @@ export default function SalesHistory() {
                   <td>{money(s.totalProfit)}</td>
                   <td className="row-actions">
                     <button className="link" onClick={() => setPrintSale(s)}>Print</button>
-                    {isOwner && !s.voidedAt && <button className="link danger" onClick={() => voidSale(s)}>Void</button>}
+                    {isOwner && !s.voidedAt && <button className="link danger" onClick={() => startVoid(s)}>Void</button>}
                   </td>
                 </tr>
               ))}
@@ -166,6 +181,30 @@ export default function SalesHistory() {
             </tbody>
           </table>
         </>
+      )}
+
+      {voidingSale && (
+        <div className="overlay" onClick={() => !voiding && setVoidingSale(null)}>
+          <div className="overlay-panel" onClick={e => e.stopPropagation()}>
+            <h2>Void sale INV-{String(voidingSale.invoiceNo).padStart(5, '0')}?</h2>
+            <p>This restocks the items and reverses any credit put on the customer's account. It can't be undone.</p>
+            <label>
+              Reason
+              <input
+                autoFocus
+                value={voidReason}
+                onChange={e => setVoidReason(e.target.value)}
+                placeholder="e.g. Cashier scanned the wrong item"
+              />
+            </label>
+            <div className="form-actions">
+              <button type="button" className="secondary" onClick={() => setVoidingSale(null)} disabled={voiding}>Cancel</button>
+              <button type="button" onClick={confirmVoid} disabled={voiding || !voidReason.trim()}>
+                {voiding ? 'Voiding…' : 'Void Sale'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <PrintableBill sale={printSale} business={business} cashierName={printSale?.user?.name} />

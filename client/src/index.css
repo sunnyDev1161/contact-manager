@@ -320,6 +320,18 @@ button.link.danger { color: var(--danger); }
   padding: 0.55rem; font-weight: 700;
 }
 
+/* Void-sale confirmation modal */
+.overlay-panel label { display: block; font-size: 0.85rem; color: #9ca6b5; margin: 0.75rem 0 1rem; }
+.overlay-panel label input {
+  display: block; width: 100%; margin-top: 0.3rem; background: #151a22; border: 1px solid #2a3341;
+  color: #e5e7eb; border-radius: 6px; padding: 0.55rem; font-size: 0.95rem;
+}
+.overlay-panel .form-actions { display: flex; gap: 0.75rem; }
+.overlay-panel .form-actions button { flex: 1; border-radius: 8px; padding: 0.6rem; font-weight: 600; }
+.overlay-panel .form-actions button:not(.secondary) { background: var(--danger); color: white; border: none; }
+.overlay-panel .form-actions button:not(.secondary):disabled { background: #4b5563; cursor: not-allowed; }
+.overlay-panel .form-actions button.secondary { background: #2a3341; color: #e5e7eb; border: none; }
+
 .ledger-list { max-height: 300px; overflow-y: auto; }
 .ledger-row {
   display: flex; justify-content: space-between; align-items: start; padding: 0.6rem 0;

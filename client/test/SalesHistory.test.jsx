@@ -33,7 +33,6 @@ function mockApiResponses({ salesList = [sale], totalCount = salesList.length } 
 
 beforeEach(() => {
   jest.clearAllMocks()
-  window.prompt = jest.fn(() => 'Wrong item scanned')
   window.print = jest.fn()
   mockApiResponses()
 })
@@ -60,23 +59,35 @@ describe('SalesHistory page — owner view', () => {
     expect(screen.queryByText(/Showing the most recent/)).not.toBeInTheDocument()
   })
 
-  it('voids a sale after prompting for a reason', async () => {
+  it('voids a sale after entering a reason in the confirmation modal', async () => {
     const user = userEvent.setup()
     api.post.mockResolvedValue({ data: { sale: { ...sale, voidedAt: '2026-01-11T00:00:00Z' } } })
     render(<SalesHistory />)
     await screen.findByText('INV-00003')
 
     await user.click(screen.getByText('Void'))
-    expect(window.prompt).toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Void sale INV-00003?' })).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Reason'), 'Wrong item scanned')
+    await user.click(screen.getByRole('button', { name: 'Void Sale' }))
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/sales/s1/void', { reason: 'Wrong item scanned' }))
   })
 
-  it('does not void when the reason prompt is cancelled', async () => {
+  it('cannot confirm the void modal with an empty reason', async () => {
     const user = userEvent.setup()
-    window.prompt = jest.fn(() => null)
     render(<SalesHistory />)
     await screen.findByText('INV-00003')
     await user.click(screen.getByText('Void'))
+    expect(screen.getByRole('button', { name: 'Void Sale' })).toBeDisabled()
+    expect(api.post).not.toHaveBeenCalled()
+  })
+
+  it('closes the void modal on Cancel without voiding', async () => {
+    const user = userEvent.setup()
+    render(<SalesHistory />)
+    await screen.findByText('INV-00003')
+    await user.click(screen.getByText('Void'))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('heading', { name: /Void sale/ })).not.toBeInTheDocument()
     expect(api.post).not.toHaveBeenCalled()
   })
 
@@ -108,6 +119,8 @@ describe('SalesHistory page — owner view', () => {
     render(<SalesHistory />)
     await screen.findByText('INV-00003')
     await user.click(screen.getByText('Void'))
+    await user.type(screen.getByLabelText('Reason'), 'test reason')
+    await user.click(screen.getByRole('button', { name: 'Void Sale' }))
     expect(await screen.findByText('This sale has already been voided.')).toBeInTheDocument()
   })
 
