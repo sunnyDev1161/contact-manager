@@ -9,6 +9,9 @@ node_modules/
 dist/
 build/
 
+# test coverage reports
+coverage/
+
 # local SQLite database (each laptop has its own data)
 *.db
 *.db-journal
