@@ -4,10 +4,15 @@ import axios from 'axios'
 // relative baseURL works with no env var. In production the frontend and
 // backend are separate deployed services, so VITE_API_URL must point at the
 // backend's real URL (set at build time — Vite bakes it into the bundle).
-const rawApiUrl = import.meta.env.VITE_API_URL
-const baseURL = rawApiUrl
-  ? `${rawApiUrl.startsWith('http') ? rawApiUrl : `https://${rawApiUrl}`}`.replace(/\/$/, '') + '/api'
-  : '/api'
+export function resolveBaseUrl(rawApiUrl) {
+  if (!rawApiUrl) return '/api'
+  return `${rawApiUrl.startsWith('http') ? rawApiUrl : `https://${rawApiUrl}`}`.replace(/\/$/, '') + '/api'
+}
+
+// Optional chaining because import.meta.env only exists under Vite's own
+// build/dev server — under Jest (no Vite) import.meta is stubbed out with
+// nothing on it, and this must not throw either way.
+const baseURL = resolveBaseUrl(import.meta.env?.VITE_API_URL)
 
 const api = axios.create({ baseURL })
 

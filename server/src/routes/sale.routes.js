@@ -1,7 +1,7 @@
 const express = require("express");
 const { z } = require("zod");
 const prisma = require("../lib/prisma");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireRole } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -45,6 +45,18 @@ router.post("/", async (req, res) => {
         });
         if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
       }
+
+      // Atomically claim the next sequential invoice number for this
+      // business. The UPDATE...increment happens inside this same
+      // transaction, so two concurrent checkouts can't be handed the same
+      // number (SQLite serializes writers, and Prisma's increment compiles
+      // to a single SET x = x + 1 rather than a read-then-write).
+      const biz = await tx.business.update({
+        where: { id: businessId },
+        data: { nextInvoiceNo: { increment: 1 } },
+        select: { nextInvoiceNo: true }
+      });
+      const invoiceNo = biz.nextInvoiceNo - 1;
 
       const lineData = [];
       let totalAmount = 0;
@@ -120,6 +132,7 @@ router.post("/", async (req, res) => {
           userId: req.user.id,
           customerId: customerId || null,
           saleType,
+          invoiceNo,
           totalAmount,
           totalCost,
           totalProfit,
@@ -174,18 +187,33 @@ router.get("/", async (req, res) => {
     if (to) where.createdAt.lte = new Date(to);
   }
 
-  const sales = await prisma.sale.findMany({
-    where,
-    include: { items: true, user: { select: { name: true, email: true } }, customer: { select: { shopName: true } } },
-    orderBy: { createdAt: "desc" },
-    take: limit ? Math.min(Number(limit), 200) : 50
-  });
-  res.json({ sales });
+  const take = limit ? Math.min(Number(limit), 200) : 50;
+  // totalCount lets the UI show "showing N of M" instead of silently
+  // truncating a range with more sales than the page size.
+  const [sales, totalCount] = await Promise.all([
+    prisma.sale.findMany({
+      where,
+      include: {
+        items: true,
+        user: { select: { name: true, email: true } },
+        customer: { select: { shopName: true } },
+        voidedBy: { select: { name: true } }
+      },
+      orderBy: { createdAt: "desc" },
+      take
+    }),
+    prisma.sale.count({ where })
+  ]);
+  res.json({ sales, totalCount });
 });
 
 router.get("/summary", async (req, res) => {
   const { from, to } = req.query;
-  const where = { businessId: req.user.businessId };
+  // Voided sales are excluded from these totals — they never actually
+  // happened from an accounting standpoint — but the sale row itself is
+  // kept (see the void endpoint below) so the list/history view can still
+  // show it for the audit trail.
+  const where = { businessId: req.user.businessId, voidedAt: null };
   if (from || to) {
     where.createdAt = {};
     if (from) where.createdAt.gte = new Date(from);
@@ -204,6 +232,89 @@ router.get("/summary", async (req, res) => {
     totalCost: agg._sum.totalCost || 0,
     totalProfit: agg._sum.totalProfit || 0
   });
+});
+
+router.get("/:id", async (req, res) => {
+  const sale = await prisma.sale.findFirst({
+    where: { id: req.params.id, businessId: req.user.businessId },
+    include: {
+      items: true,
+      user: { select: { name: true, email: true } },
+      customer: { select: { shopName: true } },
+      voidedBy: { select: { name: true } }
+    }
+  });
+  if (!sale) return res.status(404).json({ error: "Sale not found" });
+  res.json({ sale });
+});
+
+const voidSchema = z.object({
+  reason: z.string().min(1).max(300)
+});
+
+// Voids a completed sale: restocks every line item and, if any of it was
+// put on a customer's credit, reverses that with a compensating ledger
+// entry. The sale row is never deleted — it's marked voided and kept for
+// the audit trail, and excluded from revenue/profit totals from then on.
+router.post("/:id/void", requireRole("OWNER"), async (req, res) => {
+  const parsed = voidSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "A reason is required to void a sale." });
+  }
+  const businessId = req.user.businessId;
+
+  try {
+    const sale = await prisma.$transaction(async tx => {
+      const existing = await tx.sale.findFirst({
+        where: { id: req.params.id, businessId },
+        include: { items: true }
+      });
+      if (!existing) throw new Error("SALE_NOT_FOUND");
+      if (existing.voidedAt) throw new Error("ALREADY_VOIDED");
+
+      for (const item of existing.items) {
+        await tx.product.updateMany({
+          where: { id: item.productId },
+          data: { stockQty: { increment: item.quantity } }
+        });
+      }
+
+      const creditFromThisSale = await tx.ledgerEntry.aggregate({
+        where: { saleId: existing.id, type: "SALE" },
+        _sum: { amount: true }
+      });
+      const creditAmount = creditFromThisSale._sum.amount || 0;
+      if (creditAmount > 0) {
+        await tx.ledgerEntry.create({
+          data: {
+            businessId,
+            customerId: existing.customerId,
+            type: "VOID",
+            amount: creditAmount,
+            saleId: existing.id,
+            note: `Reversal for voided sale`,
+            recordedByUserId: req.user.id
+          }
+        });
+      }
+
+      return tx.sale.update({
+        where: { id: existing.id },
+        data: {
+          voidedAt: new Date(),
+          voidedByUserId: req.user.id,
+          voidReason: parsed.data.reason
+        },
+        include: { items: true, user: { select: { name: true } }, customer: { select: { shopName: true } } }
+      });
+    });
+
+    res.json({ sale });
+  } catch (err) {
+    if (err.message === "SALE_NOT_FOUND") return res.status(404).json({ error: "Sale not found" });
+    if (err.message === "ALREADY_VOIDED") return res.status(409).json({ error: "This sale has already been voided." });
+    throw err;
+  }
 });
 
 module.exports = router;

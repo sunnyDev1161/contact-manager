@@ -172,6 +172,26 @@ native decimal type), rounded consistently on every calculation. Fine at
 grocery-shop scale; if this ever needs bank-grade precision, that's a
 Postgres + `Decimal` change, not a rewrite.
 
+## Testing
+
+Three layers, each runnable independently:
+
+```bash
+cd server && npm test              # Jest + Supertest, against a real migrated SQLite db
+cd client && npm test              # Jest + React Testing Library
+cd e2e && npx playwright test      # drives the real Electron app end-to-end (needs a display; use `xvfb-run -a npx playwright test` if there isn't one)
+```
+
+`server` and `client` also have `npm run test:coverage`. All three run in CI
+on every PR (see `.github/workflows/ci.yml`).
+
+The `e2e` suite is the one that actually launches Electron and clicks
+through it like a real user would — it's what caught, for example, that
+`window.prompt()` throws in Electron (Chromium's embedder there doesn't
+implement it) even though it works fine in a browser or in a Jest/jsdom
+test. Worth keeping in mind if you add a feature that needs to ask the
+user something: use an in-app modal, not `prompt()`.
+
 ## What's deliberately not built yet
 
 - Multi-tenant onboarding/admin (billing, inviting other businesses to sign
@@ -179,4 +199,10 @@ Postgres + `Decimal` change, not a rewrite.
   onboarding flow and access model for reselling this to other vendors is a
   separate project once there's a business reason to build it.
 - Multi-device sync for the laptop version — each install has its own data.
+- Restoring from a backup. Settings can export a full JSON backup, but
+  restoring it isn't implemented — a restore has to decide what to do with
+  newer local data first, which is a real design decision, not a quick
+  addition. For now, treat the exported JSON as an off-machine safety net,
+  and use a raw copy of `server/prisma/dev.db` if you actually need to
+  restore a machine's state.
 - Receipts/printing, barcode scanning, purchase orders, supplier tracking.

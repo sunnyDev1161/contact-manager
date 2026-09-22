@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import api from '../api'
-import { money } from '../format'
+import { money, downloadCsv } from '../format'
 
 const UNITS = ['PCS', 'KG', 'G', 'LITRE', 'ML']
 
@@ -157,10 +157,24 @@ export default function Inventory() {
 
       <div className="list-header">
         <h2>Products</h2>
-        <label className="inline-check">
-          <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} />
-          Show removed
-        </label>
+        <div className="list-header-actions">
+          <button className="secondary" onClick={() => downloadCsv('inventory.csv', [
+            ['Name', p => p.name],
+            ['Category', p => p.category],
+            ['Unit', p => p.unit],
+            ['Retail Price', p => p.pricePerUnit],
+            ['Trade Price', p => p.tradePricePerUnit],
+            ['Cost', p => p.costPerUnit],
+            ['Profit/unit (retail)', p => p.pricePerUnit - p.costPerUnit],
+            ['Stock', p => p.stockQty],
+            ['Low stock threshold', p => p.lowStockThreshold],
+            ['Active', p => p.isActive ? 'Yes' : 'No']
+          ], products)} disabled={products.length === 0}>Export CSV</button>
+          <label className="inline-check">
+            <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} />
+            Show removed
+          </label>
+        </div>
       </div>
 
       {loading ? <p>Loading…</p> : (

@@ -17,6 +17,8 @@ async function balancesByCustomer(businessId) {
   });
   const map = {};
   for (const s of sums) {
+    // "SALE" increases what's owed; "PAYMENT" and "VOID" (a reversal of a
+    // voided credit sale) both decrease it.
     const delta = s.type === "SALE" ? s._sum.amount : -s._sum.amount;
     map[s.customerId] = round2((map[s.customerId] || 0) + delta);
   }

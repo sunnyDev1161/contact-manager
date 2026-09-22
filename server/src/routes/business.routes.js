@@ -20,6 +20,38 @@ const businessSchema = z.object({
   phone: z.string().max(100).optional().nullable()
 });
 
+// A full JSON export of everything this business owns — the practical
+// safety net given the whole app runs off one local SQLite file with no
+// server, no replication, and no automatic off-machine backup. Restoring
+// from it isn't implemented here: a restore has to first decide what to do
+// with newer local data, which is a real design decision, not something to
+// bolt on as an afterthought — so for now this is export-only, and a
+// restore path is a deliberate scope cut rather than a rushed, unsafe one.
+router.get("/backup", requireRole("OWNER"), async (req, res) => {
+  const businessId = req.user.businessId;
+  const [business, users, products, customers, sales, ledgerEntries] = await Promise.all([
+    prisma.business.findUnique({ where: { id: businessId } }),
+    prisma.user.findMany({ where: { businessId }, select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true } }),
+    prisma.product.findMany({ where: { businessId } }),
+    prisma.customer.findMany({ where: { businessId } }),
+    prisma.sale.findMany({ where: { businessId }, include: { items: true } }),
+    prisma.ledgerEntry.findMany({ where: { businessId } })
+  ]);
+
+  const backup = {
+    exportedAt: new Date().toISOString(),
+    business,
+    users,
+    products,
+    customers,
+    sales,
+    ledgerEntries
+  };
+
+  res.setHeader("Content-Disposition", `attachment; filename="backup-${businessId}-${Date.now()}.json"`);
+  res.json(backup);
+});
+
 router.put("/", requireRole("OWNER"), async (req, res) => {
   const parsed = businessSchema.partial().safeParse(req.body);
   if (!parsed.success) {
