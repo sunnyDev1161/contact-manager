@@ -156,6 +156,15 @@ describe("staff management", () => {
     expect(res.body.user.role).toBe("DELIVERY_RIDER");
   });
 
+  it("rejects trying to promote a staff account to OWNER through the staff route", async () => {
+    const { token } = await registerBusiness();
+    const staff = await createStaff(token, { role: "STAFF" });
+    const res = await request(app).put(`/api/auth/staff/${staff.user.id}`).set("Authorization", `Bearer ${token}`).send({
+      role: "OWNER"
+    });
+    expect(res.status).toBe(400);
+  });
+
   it("rejects a duplicate email for a staff account", async () => {
     const { token } = await registerBusiness();
     const staff = await createStaff(token);

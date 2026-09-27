@@ -27,9 +27,17 @@ const checkoutSchema = z.object({
     .min(1)
 });
 
+// Checkout and sales history are a cashier/owner concern — an ORDER_BOOKER or
+// DELIVERY_RIDER token has no legitimate reason to create a sale or read
+// financial history directly (their own mobile-app work is order-taking and
+// delivery, both still separate from a POS Sale). Without this, adding those
+// roles silently opened up every route below to them, since they only ever
+// needed requireAuth to pass.
+const DESKTOP_SALE_ROLES = ["OWNER", "STAFF"];
+
 // Records a sale: validates stock, decrements it atomically, and snapshots
 // price/cost per line so historic profit doesn't move if prices change later.
-router.post("/", async (req, res) => {
+router.post("/", requireRole(...DESKTOP_SALE_ROLES), async (req, res) => {
   const parsed = checkoutSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -178,7 +186,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.get("/", async (req, res) => {
+router.get("/", requireRole(...DESKTOP_SALE_ROLES), async (req, res) => {
   const { from, to, limit } = req.query;
   const where = { businessId: req.user.businessId };
   if (from || to) {
@@ -207,7 +215,7 @@ router.get("/", async (req, res) => {
   res.json({ sales, totalCount });
 });
 
-router.get("/summary", async (req, res) => {
+router.get("/summary", requireRole(...DESKTOP_SALE_ROLES), async (req, res) => {
   const { from, to } = req.query;
   // Voided sales are excluded from these totals — they never actually
   // happened from an accounting standpoint — but the sale row itself is
@@ -234,7 +242,7 @@ router.get("/summary", async (req, res) => {
   });
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", requireRole(...DESKTOP_SALE_ROLES), async (req, res) => {
   const sale = await prisma.sale.findFirst({
     where: { id: req.params.id, businessId: req.user.businessId },
     include: {

@@ -27,6 +27,24 @@ describe("customer CRUD", () => {
     expect(res.status).toBe(201);
   });
 
+  it("a delivery rider CAN record a payment — that's their whole job", async () => {
+    const { token } = await registerBusiness();
+    const rider = await createStaff(token, { role: "DELIVERY_RIDER" });
+    const riderToken = (await request(app).post("/api/auth/login").send({ email: rider.email, password: rider.password })).body.token;
+    const c = await createCustomer(token);
+    const res = await request(app).post(`/api/customers/${c.id}/payments`).set("Authorization", `Bearer ${riderToken}`).send({ amount: 100 });
+    expect(res.status).toBe(201);
+  });
+
+  it("an order booker cannot record a payment — that's not their job", async () => {
+    const { token } = await registerBusiness();
+    const booker = await createStaff(token, { role: "ORDER_BOOKER" });
+    const bookerToken = (await request(app).post("/api/auth/login").send({ email: booker.email, password: booker.password })).body.token;
+    const c = await createCustomer(token);
+    const res = await request(app).post(`/api/customers/${c.id}/payments`).set("Authorization", `Bearer ${bookerToken}`).send({ amount: 100 });
+    expect(res.status).toBe(403);
+  });
+
   it("rejects an invalid create payload (missing shopName)", async () => {
     const { token } = await registerBusiness();
     const res = await request(app).post("/api/customers").set("Authorization", `Bearer ${token}`).send({});
