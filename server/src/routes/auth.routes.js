@@ -7,6 +7,13 @@ const { requireAuth, requireRole } = require("../middleware/auth");
 
 const router = express.Router();
 
+// Every role an owner can assign to a staff account. OWNER itself is fixed
+// at business registration (see /register) and never assigned here.
+// ORDER_BOOKER and DELIVERY_RIDER are accounts for the separate mobile app —
+// this same login endpoint is what that app authenticates against too, so
+// their role just needs to exist here, not grant any desktop capability.
+const ASSIGNABLE_ROLES = ["STAFF", "ORDER_BOOKER", "DELIVERY_RIDER"];
+
 function signToken(user) {
   return jwt.sign(
     { id: user.id, businessId: user.businessId, role: user.role, email: user.email },
@@ -105,16 +112,18 @@ router.get("/me", requireAuth, async (req, res) => {
 const staffSchema = z.object({
   name: z.string().min(2).max(120),
   email: z.string().email(),
-  password: z.string().min(8).max(200)
+  password: z.string().min(8).max(200),
+  role: z.enum(ASSIGNABLE_ROLES).default("STAFF")
 });
 
-// Owner adds a staff account (cashier) to their own business.
+// Owner adds a staff account — a cashier, order booker, or delivery rider —
+// to their own business.
 router.post("/staff", requireAuth, requireRole("OWNER"), async (req, res) => {
   const parsed = staffSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });
   }
-  const { name, email, password } = parsed.data;
+  const { name, email, password, role } = parsed.data;
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
@@ -128,7 +137,7 @@ router.post("/staff", requireAuth, requireRole("OWNER"), async (req, res) => {
       name,
       email,
       passwordHash,
-      role: "STAFF"
+      role
     }
   });
 
@@ -146,13 +155,16 @@ router.get("/staff", requireAuth, requireRole("OWNER"), async (req, res) => {
 const staffUpdateSchema = z.object({
   name: z.string().min(2).max(120).optional(),
   isActive: z.boolean().optional(),
-  password: z.string().min(8).max(200).optional()
+  password: z.string().min(8).max(200).optional(),
+  role: z.enum(ASSIGNABLE_ROLES).optional()
 });
 
 // Owner edits a staff account: rename, deactivate/reactivate (revokes access
-// on their very next request via requireAuth, not just at next login), or
-// reset a forgotten password. Deliberately can't change `role` — a business
-// has exactly one OWNER, fixed at registration.
+// on their very next request via requireAuth, not just at next login),
+// reset a forgotten password, or reassign their role (e.g. a cashier moving
+// to order-booking). The OWNER role itself is never assignable here — a
+// business has exactly one OWNER, fixed at registration — and the owner's
+// own row can't be edited through this route at all (checked below).
 router.put("/staff/:id", requireAuth, requireRole("OWNER"), async (req, res) => {
   const parsed = staffUpdateSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -171,6 +183,7 @@ router.put("/staff/:id", requireAuth, requireRole("OWNER"), async (req, res) => 
   const updateData = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.isActive !== undefined) updateData.isActive = data.isActive;
+  if (data.role !== undefined) updateData.role = data.role;
   if (data.password !== undefined) updateData.passwordHash = await bcrypt.hash(data.password, 10);
 
   const user = await prisma.user.update({ where: { id: existing.id }, data: updateData });

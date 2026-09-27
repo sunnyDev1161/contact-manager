@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react'
 import api from '../api'
+import { ASSIGNABLE_ROLES, roleLabel } from '../roles'
 
 export default function Staff() {
   const [staff, setStaff] = useState([])
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [role, setRole] = useState('STAFF')
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
   const [editingId, setEditingId] = useState(null)
   const [editName, setEditName] = useState('')
+  const [editRole, setEditRole] = useState('STAFF')
   const [resetPassword, setResetPassword] = useState('')
 
   async function load() {
@@ -25,8 +28,8 @@ export default function Staff() {
     setError('')
     setMessage('')
     try {
-      await api.post('/auth/staff', { name, email, password })
-      setName(''); setEmail(''); setPassword('')
+      await api.post('/auth/staff', { name, email, password, role })
+      setName(''); setEmail(''); setPassword(''); setRole('STAFF')
       setMessage('Staff account created.')
       load()
     } catch (err) {
@@ -37,6 +40,7 @@ export default function Staff() {
   function startEdit(u) {
     setEditingId(u.id)
     setEditName(u.name)
+    setEditRole(u.role)
     setResetPassword('')
     setError('')
     setMessage('')
@@ -45,13 +49,14 @@ export default function Staff() {
   function cancelEdit() {
     setEditingId(null)
     setEditName('')
+    setEditRole('STAFF')
     setResetPassword('')
   }
 
   async function saveEdit(id) {
     setError('')
     try {
-      const payload = { name: editName }
+      const payload = { name: editName, role: editRole }
       if (resetPassword) payload.password = resetPassword
       await api.put(`/auth/staff/${id}`, payload)
       setMessage('Staff account updated.')
@@ -78,7 +83,7 @@ export default function Staff() {
   return (
     <div>
       <h1>Staff</h1>
-      <p>Give cashiers their own login so every sale is tied to the person who made it.</p>
+      <p>Give cashiers, order bookers, and delivery riders their own login so every sale, order, or delivery is tied to the person who made it.</p>
       {error && <div className="error-banner">{error}</div>}
       {message && <div className="success-banner">{message}</div>}
 
@@ -87,6 +92,12 @@ export default function Staff() {
         <label>Name<input value={name} onChange={e => setName(e.target.value)} required /></label>
         <label>Email<input type="email" value={email} onChange={e => setEmail(e.target.value)} required /></label>
         <label>Temporary password<input type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={8} /></label>
+        <label>
+          Role
+          <select value={role} onChange={e => setRole(e.target.value)}>
+            {ASSIGNABLE_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </select>
+        </label>
         <div className="form-actions"><button type="submit">Add staff</button></div>
       </form>
 
@@ -99,7 +110,11 @@ export default function Staff() {
                 <>
                   <td><input value={editName} onChange={e => setEditName(e.target.value)} /></td>
                   <td>{u.email}</td>
-                  <td>{u.role}</td>
+                  <td>
+                    <select value={editRole} onChange={e => setEditRole(e.target.value)}>
+                      {ASSIGNABLE_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                    </select>
+                  </td>
                   <td>
                     {u.role !== 'OWNER' && (
                       <input
@@ -120,7 +135,7 @@ export default function Staff() {
                 <>
                   <td>{u.name}</td>
                   <td>{u.email}</td>
-                  <td>{u.role}</td>
+                  <td>{roleLabel(u.role)}</td>
                   <td>{u.isActive ? 'Active' : 'Deactivated'}</td>
                   <td className="row-actions">
                     {u.role !== 'OWNER' && (

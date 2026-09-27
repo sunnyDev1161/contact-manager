@@ -120,6 +120,51 @@ describe("staff management", () => {
     expect(res.body.user.isActive).toBe(true);
   });
 
+  it("lets an owner create an order-booker account", async () => {
+    const { token } = await registerBusiness();
+    const res = await request(app).post("/api/auth/staff").set("Authorization", `Bearer ${token}`).send({
+      name: "Bilal", email: uniqueEmail("booker"), password: "password123", role: "ORDER_BOOKER"
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.user.role).toBe("ORDER_BOOKER");
+  });
+
+  it("lets an owner create a delivery-rider account", async () => {
+    const { token } = await registerBusiness();
+    const res = await request(app).post("/api/auth/staff").set("Authorization", `Bearer ${token}`).send({
+      name: "Usman", email: uniqueEmail("rider"), password: "password123", role: "DELIVERY_RIDER"
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.user.role).toBe("DELIVERY_RIDER");
+  });
+
+  it("rejects an unknown role when creating a staff account", async () => {
+    const { token } = await registerBusiness();
+    const res = await request(app).post("/api/auth/staff").set("Authorization", `Bearer ${token}`).send({
+      name: "X", email: uniqueEmail(), password: "password123", role: "OWNER"
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("lets an owner reassign a staff account's role", async () => {
+    const { token } = await registerBusiness();
+    const staff = await createStaff(token, { role: "STAFF" });
+    const res = await request(app).put(`/api/auth/staff/${staff.user.id}`).set("Authorization", `Bearer ${token}`).send({
+      role: "DELIVERY_RIDER"
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.user.role).toBe("DELIVERY_RIDER");
+  });
+
+  it("rejects trying to promote a staff account to OWNER through the staff route", async () => {
+    const { token } = await registerBusiness();
+    const staff = await createStaff(token, { role: "STAFF" });
+    const res = await request(app).put(`/api/auth/staff/${staff.user.id}`).set("Authorization", `Bearer ${token}`).send({
+      role: "OWNER"
+    });
+    expect(res.status).toBe(400);
+  });
+
   it("rejects a duplicate email for a staff account", async () => {
     const { token } = await registerBusiness();
     const staff = await createStaff(token);

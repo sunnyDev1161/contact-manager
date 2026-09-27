@@ -283,3 +283,63 @@ describe("POST /api/sales/:id/void", () => {
     expect(voidedRow.voidedAt).toBeTruthy();
   });
 });
+
+// Checkout and sales history are cashier/owner work. Adding ORDER_BOOKER and
+// DELIVERY_RIDER as staff roles must not silently open these up to them too —
+// their own job (order-taking, delivery) never involves creating or reading
+// a Sale directly.
+describe("sale routes reject mobile-app roles", () => {
+  async function loginAs(ownerToken, role) {
+    const staff = await createStaff(ownerToken, { role });
+    const res = await request(app).post("/api/auth/login").send({ email: staff.email, password: staff.password });
+    return res.body.token;
+  }
+
+  it("blocks an order booker from checking out a sale", async () => {
+    const { token } = await registerBusiness();
+    const p = await createProduct(token, { pricePerUnit: 100, stockQty: 10 });
+    const bookerToken = await loginAs(token, "ORDER_BOOKER");
+    const res = await request(app).post("/api/sales").set("Authorization", `Bearer ${bookerToken}`).send({
+      items: [{ productId: p.id, quantity: 1 }], amountTendered: 100
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("blocks a delivery rider from checking out a sale", async () => {
+    const { token } = await registerBusiness();
+    const p = await createProduct(token, { pricePerUnit: 100, stockQty: 10 });
+    const riderToken = await loginAs(token, "DELIVERY_RIDER");
+    const res = await request(app).post("/api/sales").set("Authorization", `Bearer ${riderToken}`).send({
+      items: [{ productId: p.id, quantity: 1 }], amountTendered: 100
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("blocks an order booker from reading sales history and the summary", async () => {
+    const { token } = await registerBusiness();
+    const p = await createProduct(token, { pricePerUnit: 100, stockQty: 10 });
+    const created = await request(app).post("/api/sales").set("Authorization", `Bearer ${token}`).send({
+      items: [{ productId: p.id, quantity: 1 }], amountTendered: 100
+    });
+    const saleId = created.body.sale.id;
+    const bookerToken = await loginAs(token, "ORDER_BOOKER");
+
+    expect((await request(app).get("/api/sales").set("Authorization", `Bearer ${bookerToken}`)).status).toBe(403);
+    expect((await request(app).get("/api/sales/summary").set("Authorization", `Bearer ${bookerToken}`)).status).toBe(403);
+    expect((await request(app).get(`/api/sales/${saleId}`).set("Authorization", `Bearer ${bookerToken}`)).status).toBe(403);
+  });
+
+  it("still allows a cashier (STAFF) to check out and read sales history", async () => {
+    const { token } = await registerBusiness();
+    const p = await createProduct(token, { pricePerUnit: 100, stockQty: 10 });
+    const staffToken = await loginAs(token, "STAFF");
+
+    const checkout = await request(app).post("/api/sales").set("Authorization", `Bearer ${staffToken}`).send({
+      items: [{ productId: p.id, quantity: 1 }], amountTendered: 100
+    });
+    expect(checkout.status).toBe(201);
+
+    const list = await request(app).get("/api/sales").set("Authorization", `Bearer ${staffToken}`);
+    expect(list.status).toBe(200);
+  });
+});

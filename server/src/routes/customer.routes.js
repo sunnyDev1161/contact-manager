@@ -137,8 +137,10 @@ const paymentSchema = z.object({
 
 // Records a payment against a customer's balance, independent of any sale —
 // covers the common case of a shopkeeper paying down their tab on a day
-// they aren't buying anything.
-router.post("/:id/payments", async (req, res) => {
+// they aren't buying anything, and is the same endpoint a delivery rider's
+// cash collection is meant to call. An order booker has no reason to touch
+// the ledger — their job is taking orders, not collecting payment.
+router.post("/:id/payments", requireRole("OWNER", "STAFF", "DELIVERY_RIDER"), async (req, res) => {
   const parsed = paymentSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });

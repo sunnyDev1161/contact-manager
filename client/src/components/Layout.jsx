@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { roleLabel } from '../roles'
 import api from '../api'
 
 export default function Layout() {
@@ -37,7 +38,7 @@ export default function Layout() {
           {user?.role === 'OWNER' && <NavLink to="/settings">Settings</NavLink>}
         </nav>
         <div className="user-box">
-          <span>{user?.name} ({user?.role})</span>
+          <span>{user?.name} ({roleLabel(user?.role)})</span>
           <button onClick={logout}>Log out</button>
         </div>
       </header>

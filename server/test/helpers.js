@@ -25,14 +25,16 @@ async function registerBusiness(overrides = {}) {
 
 async function createStaff(token, overrides = {}) {
   const email = overrides.email || uniqueEmail("staff");
+  const body = {
+    name: overrides.name || "Test Staff",
+    email,
+    password: overrides.password || "password123"
+  };
+  if (overrides.role) body.role = overrides.role;
   const res = await request(app)
     .post("/api/auth/staff")
     .set("Authorization", `Bearer ${token}`)
-    .send({
-      name: overrides.name || "Test Staff",
-      email,
-      password: overrides.password || "password123"
-    });
+    .send(body);
   return { user: res.body.user, email, password: overrides.password || "password123" };
 }
 
