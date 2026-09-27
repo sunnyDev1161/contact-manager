@@ -14,7 +14,9 @@ datasource db {
 // SQLite has no native enum type, so Role and Unit are plain strings here.
 // Valid values are enforced at the API layer (zod schemas in the routes),
 // same as they'd be validated client-side regardless of the DB engine.
-// Role: "OWNER" | "STAFF"
+// Role: "OWNER" | "STAFF" | "ORDER_BOOKER" | "DELIVERY_RIDER"
+// ORDER_BOOKER and DELIVERY_RIDER are accounts for the separate mobile app;
+// they authenticate against this same User table but have no desktop UI.
 // Unit: "PCS" | "KG" | "G" | "LITRE" | "ML"
 
 // A Business is a tenant. Every table below is scoped to one, so the schema

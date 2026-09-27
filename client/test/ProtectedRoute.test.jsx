@@ -43,4 +43,18 @@ describe('ProtectedRoute', () => {
     renderWithRoute(true)
     expect(screen.getByText('Secret Content')).toBeInTheDocument()
   })
+
+  it('shows the mobile-only notice for an ORDER_BOOKER instead of desktop content', () => {
+    mockUseAuth.mockReturnValue({ user: { name: 'Bilal', role: 'ORDER_BOOKER' }, logout: jest.fn() })
+    renderWithRoute(false)
+    expect(screen.queryByText('Secret Content')).not.toBeInTheDocument()
+    expect(screen.getByText('This is a mobile app account')).toBeInTheDocument()
+  })
+
+  it('shows the mobile-only notice for a DELIVERY_RIDER on an ownerOnly route too', () => {
+    mockUseAuth.mockReturnValue({ user: { name: 'Usman', role: 'DELIVERY_RIDER' }, logout: jest.fn() })
+    renderWithRoute(true)
+    expect(screen.queryByText('Secret Content')).not.toBeInTheDocument()
+    expect(screen.getByText('This is a mobile app account')).toBeInTheDocument()
+  })
 })

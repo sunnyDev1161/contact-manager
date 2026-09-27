@@ -33,15 +33,42 @@ describe('Staff page', () => {
     await user.click(screen.getByRole('button', { name: 'Add staff' }))
 
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/auth/staff', {
-      name: 'Bilal', email: 'bilal@example.com', password: 'password123'
+      name: 'Bilal', email: 'bilal@example.com', password: 'password123', role: 'STAFF'
     }))
     expect(await screen.findByText('Staff account created.')).toBeInTheDocument()
+  })
+
+  it('creates a delivery-rider account when that role is selected', async () => {
+    const user = userEvent.setup()
+    api.post.mockResolvedValue({ data: { user: { ...cashier, role: 'DELIVERY_RIDER' } } })
+    render(<Staff />)
+    await screen.findByText('Ali')
+
+    await user.type(screen.getByLabelText('Name'), 'Usman')
+    await user.type(screen.getByLabelText('Email'), 'usman@example.com')
+    await user.type(screen.getByLabelText('Temporary password'), 'password123')
+    await user.selectOptions(screen.getByLabelText('Role'), 'DELIVERY_RIDER')
+    await user.click(screen.getByRole('button', { name: 'Add staff' }))
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/auth/staff', {
+      name: 'Usman', email: 'usman@example.com', password: 'password123', role: 'DELIVERY_RIDER'
+    }))
+  })
+
+  it('shows a human-readable role label for order bookers and riders', async () => {
+    api.get.mockResolvedValue({
+      data: { users: [owner, cashier, { id: 'u2', name: 'Bilal', email: 'bilal@x.com', role: 'ORDER_BOOKER', isActive: true }] }
+    })
+    render(<Staff />)
+    await screen.findByText('Bilal')
+    const row = screen.getByText('Bilal').closest('tr')
+    expect(within(row).getByText('Order Booker')).toBeInTheDocument()
   })
 
   it('does not offer Edit/Deactivate for the OWNER row', async () => {
     render(<Staff />)
     await screen.findByText('Ali')
-    const ownerRow = screen.getByText('Owner').closest('tr')
+    const ownerRow = screen.getByText('owner@example.com').closest('tr')
     expect(within(ownerRow).queryByText('Edit')).not.toBeInTheDocument()
   })
 
@@ -61,7 +88,23 @@ describe('Staff page', () => {
     await user.click(screen.getByText('Save'))
 
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/auth/staff/u1', {
-      name: 'Ali Updated', password: 'newpassword123'
+      name: 'Ali Updated', role: 'STAFF', password: 'newpassword123'
+    }))
+  })
+
+  it('lets an owner reassign a staff member\'s role', async () => {
+    const user = userEvent.setup()
+    api.put.mockResolvedValue({ data: { user: { ...cashier, role: 'ORDER_BOOKER' } } })
+    render(<Staff />)
+    await screen.findByText('Ali')
+
+    const row = screen.getByText('Ali').closest('tr')
+    await user.click(within(row).getByText('Edit'))
+    await user.selectOptions(within(row).getByRole('combobox'), 'ORDER_BOOKER')
+    await user.click(screen.getByText('Save'))
+
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/auth/staff/u1', {
+      name: 'Ali', role: 'ORDER_BOOKER'
     }))
   })
 
