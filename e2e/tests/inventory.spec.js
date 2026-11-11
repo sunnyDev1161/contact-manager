@@ -79,11 +79,7 @@ test.describe("Inventory management", () => {
     await window.click('a:has-text("POS")');
     await window.waitForURL("**/pos");
     await window.click('.product-tile:has-text("Cocoa Powder")');
-    await window.click('button:has-text("Pay Rs. 250.00")');
-    await window.click('.payment-panel .keypad-key:has-text("2")');
-    await window.click('.payment-panel .keypad-key:has-text("5")');
-    await window.click('.payment-panel .keypad-key:has-text("0")');
-    await window.click('.payment-actions button:has-text("Confirm Sale")');
+    await window.click('button:has-text("Complete Sale Rs. 250.00")');
     await expect(window.locator(".success-banner")).toContainText("Sale complete");
 
     await window.click('a:has-text("Inventory")');

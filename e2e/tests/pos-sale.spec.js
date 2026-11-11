@@ -31,19 +31,13 @@ test.describe("POS checkout flow", () => {
     await registerFreshBusiness(window);
   });
 
-  test("completes a walk-in cash sale and decrements stock", async () => {
+  test("completes a walk-in sale in one click, paid in full, and decrements stock", async () => {
     await addProduct(window, { name: "Basmati Rice", retail: 220, trade: 200, cost: 180, stock: 100 });
 
     await window.click('.product-tile:has-text("Basmati Rice")');
     await expect(window.locator(".total-display")).toContainText("Rs. 220.00");
 
-    await window.click('button:has-text("Pay Rs. 220.00")');
-    await window.click('.payment-panel .keypad-key:has-text("2")');
-    await window.click('.payment-panel .keypad-key:has-text("2")');
-    await window.click('.payment-panel .keypad-key:has-text("0")');
-    await expect(window.locator(".payment-actions button:has-text(\"Confirm Sale\")")).toBeEnabled();
-    await window.click('.payment-actions button:has-text("Confirm Sale")');
-
+    await window.click('button:has-text("Complete Sale Rs. 220.00")');
     await expect(window.locator(".success-banner")).toContainText("Sale complete");
     // Note: "Print Bill" is deliberately not clicked here — window.print()
     // opens a real native OS print dialog in Electron (correct, expected
@@ -56,17 +50,15 @@ test.describe("POS checkout flow", () => {
     await expect(row.locator("td").nth(7)).toHaveText("99"); // stock 100 - 1
   });
 
-  test("blocks a walk-in sale from confirming until fully paid", async () => {
+  test("disables Complete Sale until the cart has an item", async () => {
     await addProduct(window, { name: "Chaat Masala", retail: 80, trade: 65, cost: 50, stock: 500 });
+    await expect(window.locator('button:has-text("Complete Sale")')).toBeDisabled();
     await window.click('.product-tile:has-text("Chaat Masala")');
-    await window.click('button:has-text("Pay Rs. 80.00")');
-    await expect(window.locator(".payment-actions button:has-text(\"Confirm Sale\")")).toBeDisabled();
-    await window.click('.payment-panel .keypad-key:has-text("5")');
-    await expect(window.locator(".payment-actions button:has-text(\"Confirm Sale\")")).toBeDisabled();
-    await window.click('.payment-actions button:has-text("Cancel")'); // leave the overlay closed for the next test
+    await expect(window.locator('button:has-text("Complete Sale Rs. 80.00")')).toBeEnabled();
+    await window.click('button:has-text("Clear Sale")'); // leave the cart empty for the next test
   });
 
-  test("a credit sale to a customer updates their ledger balance", async () => {
+  test("a credit sale to a customer goes fully onto their ledger balance", async () => {
     await addProduct(window, { name: "Garlic Paste", retail: 120, trade: 100, cost: 80, stock: 200 });
 
     await window.click('a:has-text("Customers")');
@@ -84,17 +76,13 @@ test.describe("POS checkout flow", () => {
     await window.click('.product-tile:has-text("Garlic Paste")');
     await expect(window.locator(".total-display")).toContainText("Rs. 100.00"); // trade price
 
-    await window.click('button:has-text("Pay Rs. 100.00")');
-    await window.click('.payment-panel .keypad-key:has-text("4")');
-    await window.click('.payment-panel .keypad-key:has-text("0")');
-    await expect(window.locator(".payment-row.credit")).toContainText("Rs. 60.00");
-    await window.click('.payment-actions button:has-text("Confirm Sale")');
+    await window.click('button:has-text("Complete Sale Rs. 100.00")');
     await expect(window.locator(".success-banner")).toContainText("added to Malik General Store's account");
 
     await window.click('a:has-text("Customers")');
     await window.waitForURL("**/customers");
     const row = window.locator("tr", { hasText: "Malik General Store" });
-    await expect(row.locator(".balance-owed")).toContainText("Rs. 60.00");
+    await expect(row.locator(".balance-owed")).toContainText("Rs. 100.00");
   });
 
   test("voiding a sale restocks the item and reverses any credit", async () => {
@@ -110,8 +98,7 @@ test.describe("POS checkout flow", () => {
     await window.fill('.customer-search input', "Zafar");
     await window.click('.customer-option:has-text("Zafar Store")');
     await window.click('.product-tile:has-text("Cocoa Powder")');
-    await window.click('button:has-text("Pay Rs. 210.00")'); // trade price
-    await window.click('.payment-actions button:has-text("Confirm Sale")'); // 0 tendered, fully on credit
+    await window.click('button:has-text("Complete Sale Rs. 210.00")'); // trade price, fully on credit
 
     await window.click('a:has-text("Customers")');
     await window.waitForURL("**/customers");
