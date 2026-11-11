@@ -213,8 +213,6 @@ button.link.danger { color: var(--danger); }
 .customer-option:hover { background: #232a35; }
 .customer-dropdown-empty { padding: 0.6rem 0.8rem; color: #8b95a5; font-size: 0.82rem; }
 .customer-dropdown-close { width: 100%; background: #2a3341; color: #8b95a5; border: none; padding: 0.4rem; font-size: 0.8rem; }
-.payment-customer { color: #8b95a5; font-size: 0.85rem; margin-bottom: 0.5rem; }
-.payment-row.credit { color: #fbbf24; }
 
 .sale-type-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
 .sale-type-btn { background: #2a3341; color: #8b95a5; border: none; border-radius: 8px; padding: 0.6rem; font-weight: 700; font-size: 0.9rem; }
@@ -295,13 +293,6 @@ button.link.danger { color: var(--danger); }
 .held-row small { color: #8b95a5; }
 .held-actions { display: flex; gap: 0.75rem; align-items: center; }
 .held-actions button:first-child { background: var(--primary); color: white; border: none; border-radius: 6px; padding: 0.4rem 0.8rem; font-size: 0.85rem; }
-
-.payment-panel .payment-total { font-size: 1.3rem; font-weight: 700; margin-bottom: 0.75rem; }
-.payment-row { display: flex; justify-content: space-between; padding: 0.4rem 0; font-size: 1rem; }
-.payment-row.negative { color: #fca5a5; }
-.payment-tendered { font-variant-numeric: tabular-nums; }
-.payment-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.75rem; }
-.payment-actions .secondary { background: #2a3341; color: #e5e7eb; border: none; border-radius: 8px; font-weight: 600; }
 
 /* Customers / credit ledger */
 .balance-owed { color: var(--danger); font-weight: 700; }

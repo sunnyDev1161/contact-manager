@@ -160,45 +160,41 @@ describe('POS — hold / recall', () => {
   })
 })
 
-describe('POS — payment and checkout', () => {
-  it('requires full payment for a walk-in sale before Confirm Sale is enabled', async () => {
-    const user = userEvent.setup()
+describe('POS — checkout', () => {
+  it('disables Complete Sale until the cart has at least one item', async () => {
     await renderPOS()
-    await user.click(screen.getByText('Basmati Rice'))
-    await user.click(screen.getByText('Pay Rs. 220.00'))
-    const confirmBtn = screen.getByRole('button', { name: 'Confirm Sale' })
-    expect(confirmBtn).toBeDisabled()
-
-    for (const d of ['2', '2', '0']) await user.click(screen.getByText(d, { selector: '.overlay-panel .keypad-key' }))
-    expect(confirmBtn).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /Complete Sale/ })).toBeDisabled()
   })
 
-  it('allows a customer sale to be confirmed with 0 tendered (fully on credit)', async () => {
-    const user = userEvent.setup()
-    await renderPOS()
-    await user.type(screen.getByPlaceholderText(/Customer \(shop name\)/), 'Malik')
-    await user.click(screen.getByText('Malik General Store'))
-    await user.click(screen.getByText('Basmati Rice'))
-    await user.click(screen.getByText(/Pay Rs\./))
-    expect(screen.getByRole('button', { name: 'Confirm Sale' })).not.toBeDisabled()
-    expect(screen.getByText(/Credit \(added to Malik General Store's account\)/)).toBeInTheDocument()
-  })
-
-  it('completes a sale and shows the credit note when partially paid', async () => {
+  it('completes a walk-in sale in one click, paid in full', async () => {
     const user = userEvent.setup()
     api.post.mockResolvedValue({
-      data: { sale: { id: 's1', invoiceNo: 1, totalAmount: 200, totalProfit: 20, amountPaid: 50, items: [] } }
+      data: { sale: { id: 's1', invoiceNo: 1, totalAmount: 220, totalProfit: 20, amountPaid: 220, items: [] } }
+    })
+    await renderPOS()
+    await user.click(screen.getByText('Basmati Rice'))
+    await user.click(screen.getByRole('button', { name: 'Complete Sale Rs. 220.00' }))
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/sales', {
+      saleType: 'RETAIL', items: [{ productId: 'p1', quantity: 1 }], customerId: null, amountTendered: 220
+    }))
+    expect(await screen.findByText(/Sale complete: total Rs\. 220\.00/)).toBeInTheDocument()
+    expect(screen.getByText('No items yet — scan or tap a product.')).toBeInTheDocument()
+  })
+
+  it('completes a customer sale in one click, fully on credit', async () => {
+    const user = userEvent.setup()
+    api.post.mockResolvedValue({
+      data: { sale: { id: 's1', invoiceNo: 1, totalAmount: 200, totalProfit: 20, amountPaid: 0, items: [] } }
     })
     await renderPOS()
     await user.type(screen.getByPlaceholderText(/Customer \(shop name\)/), 'Malik')
     await user.click(screen.getByText('Malik General Store'))
     await user.click(screen.getByText('Basmati Rice'))
-    await user.click(screen.getByText(/Pay Rs\./))
-    for (const d of ['5', '0']) await user.click(screen.getByText(d, { selector: '.overlay-panel .keypad-key' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm Sale' }))
+    await user.click(screen.getByRole('button', { name: /Complete Sale/ }))
 
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/sales', {
-      saleType: 'TRADE', items: [{ productId: 'p1', quantity: 1 }], customerId: 'c1', amountTendered: 50
+      saleType: 'TRADE', items: [{ productId: 'p1', quantity: 1 }], customerId: 'c1', amountTendered: 0
     }))
     expect(await screen.findByText(/added to Malik General Store's account/)).toBeInTheDocument()
   })
@@ -208,9 +204,7 @@ describe('POS — payment and checkout', () => {
     api.post.mockRejectedValue({ response: { data: { error: 'Not enough stock for "Basmati Rice".' } } })
     await renderPOS()
     await user.click(screen.getByText('Basmati Rice'))
-    await user.click(screen.getByText('Pay Rs. 220.00'))
-    for (const d of ['2', '2', '0']) await user.click(screen.getByText(d, { selector: '.overlay-panel .keypad-key' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm Sale' }))
+    await user.click(screen.getByRole('button', { name: /Complete Sale/ }))
     expect(await screen.findByText('Not enough stock for "Basmati Rice".')).toBeInTheDocument()
     expect(screen.getByText('Rs. 220.00/KG')).toBeInTheDocument()
   })

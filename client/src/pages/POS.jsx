@@ -42,8 +42,6 @@ export default function POS() {
   const [keypadValue, setKeypadValue] = useState('')
   const [heldBills, setHeldBills] = useState([])
   const [showHeld, setShowHeld] = useState(false)
-  const [showPayment, setShowPayment] = useState(false)
-  const [cashTendered, setCashTendered] = useState('')
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [checkingOut, setCheckingOut] = useState(false)
@@ -259,23 +257,22 @@ export default function POS() {
   }
 
   const total = cart.reduce((sum, l) => sum + linePrice(l) * (Number(l.qty) || 0), 0)
-  const tendered = parseFloat(cashTendered) || 0
-  const change = tendered - total
-  // A walk-in (no customer) must tender the full total — there's no account
-  // to put a shortfall on. A customer-attached sale can be paid any amount;
-  // whatever's short becomes credit on their tab.
-  const canConfirm = customer ? tendered >= 0 : tendered >= total
 
   async function completeSale() {
     setError('')
     setCheckingOut(true)
     try {
       const items = cart.map(l => ({ productId: l.productId, quantity: Number(l.qty) }))
+      // A walk-in has no account to put a shortfall on, so it's always paid
+      // in full. A customer-attached sale goes fully onto their account —
+      // any cash actually handed over is recorded separately, from the
+      // Customers page, rather than tracked here at the point of sale.
+      const amountTendered = customer ? 0 : total
       const { data } = await api.post('/sales', {
         saleType,
         items,
         customerId: customer?.id || null,
-        amountTendered: tendered
+        amountTendered
       })
       const creditNote = data.sale.totalAmount - data.sale.amountPaid > 0
         ? `, ${money(data.sale.totalAmount - data.sale.amountPaid)} added to ${customer.shopName}'s account`
@@ -284,8 +281,6 @@ export default function POS() {
       setLastSale(data.sale)
       setCart([])
       setSelectedId(null)
-      setShowPayment(false)
-      setCashTendered('')
       setCustomer(null)
       loadProducts()
       loadCustomers()
@@ -443,8 +438,8 @@ export default function POS() {
           </button>
           <button className="fn-btn fn-clear" onClick={clearSale} disabled={cart.length === 0}>Clear Sale</button>
         </div>
-        <button className="pay-btn" onClick={() => setShowPayment(true)} disabled={cart.length === 0}>
-          Pay {money(total)}
+        <button className="pay-btn" onClick={completeSale} disabled={cart.length === 0 || checkingOut}>
+          {checkingOut ? 'Processing…' : `Complete Sale ${money(total)}`}
         </button>
       </div>
 
@@ -469,43 +464,6 @@ export default function POS() {
               )
             })}
             <button className="overlay-close" onClick={() => setShowHeld(false)}>Close</button>
-          </div>
-        </div>
-      )}
-
-      {showPayment && (
-        <div className="overlay" onClick={() => !checkingOut && setShowPayment(false)}>
-          <div className="overlay-panel payment-panel" onClick={e => e.stopPropagation()}>
-            <h2>Payment</h2>
-            <div className="payment-total">Due: {money(total)}</div>
-            {customer && <div className="payment-customer">For: {customer.shopName}</div>}
-            <div className="payment-row">
-              <span>Cash tendered</span>
-              <span className="payment-tendered">Rs. {cashTendered || '0'}</span>
-            </div>
-            {change >= 0 ? (
-              <div className="payment-row">
-                <span>Change</span>
-                <span>{money(change)}</span>
-              </div>
-            ) : customer ? (
-              <div className="payment-row credit">
-                <span>Credit (added to {customer.shopName}'s account)</span>
-                <span>{money(Math.abs(change))}</span>
-              </div>
-            ) : (
-              <div className="payment-row negative">
-                <span>Still due — select a customer to allow credit</span>
-                <span>{money(Math.abs(change))}</span>
-              </div>
-            )}
-            <NumericKeypad value={cashTendered} onChange={setCashTendered} />
-            <div className="payment-actions">
-              <button className="secondary" onClick={() => setShowPayment(false)} disabled={checkingOut}>Cancel</button>
-              <button className="pay-btn" onClick={completeSale} disabled={checkingOut || !canConfirm}>
-                {checkingOut ? 'Processing…' : 'Confirm Sale'}
-              </button>
-            </div>
           </div>
         </div>
       )}
