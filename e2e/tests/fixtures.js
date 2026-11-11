@@ -68,11 +68,11 @@ async function registerFreshBusiness(window) {
 // (e.g. a failed-login test correctly ends back on /login, not /pos).
 async function ensureLoggedOut(window) {
   if (window.url().includes("/login") || window.url().includes("/register")) return;
-  // A test that ends mid-flow (payment panel, held-sales list, ledger
-  // overlay) would otherwise block the Log out click behind an overlay
-  // that intercepts pointer events — close it first defensively so one
-  // test's leftover UI state can never hang the next.
-  const overlayClose = window.locator(".overlay-close, .payment-actions button:has-text(\"Cancel\")");
+  // A test that ends mid-flow (e.g. the held-sales list) would otherwise
+  // block the Log out click behind an overlay that intercepts pointer
+  // events — close it first defensively so one test's leftover UI state
+  // can never hang the next.
+  const overlayClose = window.locator(".overlay-close");
   if (await overlayClose.count()) await overlayClose.first().click();
 
   const logoutBtn = window.locator('button:has-text("Log out")');
